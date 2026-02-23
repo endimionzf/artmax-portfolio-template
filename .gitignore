@@ -19,7 +19,8 @@
 
 # production
 /build
-
+/public/portfolio
+/hostico-deploy
 # misc
 .DS_Store
 *.pem
@@ -39,3 +40,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# media (excluded as requested)
+*.mp4
+*.webm
+*.mov
+*.ogg
+/public/portfolio/**/*.mp4
+/public/portfolio/**/*.webm

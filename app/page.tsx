@@ -1,65 +1,162 @@
-import Image from "next/image";
+'use client';
+
+import { StartOverlay } from '@/components/StartOverlay';
+import { ContactOverlay } from '@/components/ContactOverlay';
+import { Canvas } from '@react-three/fiber';
+import { Experience } from '@/components/Experience';
+import { Suspense, useState, useEffect, useCallback } from 'react';
+import { HUD } from '@/components/HUD';
+import { Leva } from 'leva';
+import { resumeAudioContext } from '@/hooks/use-spatial-audio';
+import { ResourceMonitor } from '@/components/ResourceMonitor';
+import { videoPool } from '@/hooks/use-video-pool';
+
 
 export default function Home() {
+  const [audioEnabled, setAudioEnabled] = useState(false);
+  const [activeProjectInfo, setActiveProjectInfo] = useState<{ title: string } | null>(null);
+  const [isGridMode, setIsGridMode] = useState(false);
+  const [visibleLines, setVisibleLines] = useState<string[]>([]);
+  const [isStarted, setIsStarted] = useState(false);
+  const [isContactOpen, setIsContactOpen] = useState(false);
+  
+  // Production Readiness: Hide Leva unless ?debug=true is present
+  const [showDebug, setShowDebug] = useState(false);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setShowDebug(params.get('debug') === 'true' || process.env.NODE_ENV === 'development');
+  }, []);
+  
+  // Controls the fixed slideshow sequence length based on user click
+  const [journeyState, setJourneyState] = useState<{ category: 'video'|'3d'|'ai', step: number } | null>(null);
+  // We need to know max planes to bound the next/prev buttons, Experience can bubble this up
+  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({ video: 0, '3d': 0, 'ai': 0 });
+
+  const toggleLine = (category: 'video'|'3d'|'ai') => {
+      setVisibleLines(prev => prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]);
+  };
+
+  const handleNextJourney = useCallback(() => {
+      if (journeyState) {
+          const max = categoryCounts[journeyState.category] - 1;
+          setJourneyState({ ...journeyState, step: Math.min(journeyState.step + 1, max) });
+      }
+  }, [journeyState, categoryCounts]);
+
+  const handlePrevJourney = useCallback(() => {
+      if (journeyState) {
+          setJourneyState({ ...journeyState, step: Math.max(journeyState.step - 1, 0) });
+      }
+  }, [journeyState]);
+
+  const handlePlanesLoaded = useCallback((planes: any[]) => {
+      setCategoryCounts({
+          video: planes.filter(p => p.category === 'video').length,
+          '3d': planes.filter(p => p.category === '3d').length,
+          ai: planes.filter(p => p.category === 'ai').length
+      });
+  }, []);
+
+  const handleFocusClear = useCallback(() => {
+      setActiveProjectInfo(null);
+  }, []);
+
+  const handlePlaneClick = useCallback((category: 'video'|'3d'|'ai', indexInCategory: number) => {
+      setJourneyState({ category, step: indexInCategory });
+  }, []);
+
+  const handleOpenInfo = useCallback((title: string) => {
+      setActiveProjectInfo({ title });
+  }, []);
+
+  const handleJourneyLineClick = useCallback((category: 'video'|'3d'|'ai') => {
+      if (journeyState?.category === category) {
+        setJourneyState(null);
+      } else {
+        setJourneyState({ category, step: 0 });
+        if (!visibleLines.includes(category)) {
+            setVisibleLines(prev => [...prev, category]);
+        }
+      }
+  }, [journeyState, visibleLines]);
+
+  const [isPointingAtPlane, setIsPointingAtPlane] = useState(false);
+
+  // Mute audio when contact overlay is open
+  const effectiveAudioEnabled = audioEnabled && !isContactOpen;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+    <main className="relative w-full h-[100dvh] overflow-hidden bg-[#0a0a0a]">
+      {showDebug && <ResourceMonitor />}
+      <Leva hidden={!showDebug} />
+      <StartOverlay onStart={() => { 
+        import('@/hooks/use-spatial-audio').then(({ initAudioContext }) => {
+            initAudioContext();
+        });
+        videoPool.prime();
+        setAudioEnabled(true); 
+        setIsStarted(true); 
+      }} />
+
+      <ContactOverlay 
+        isOpen={isContactOpen} 
+        onClose={() => setIsContactOpen(false)} 
+      />
+
+      {/* Background Ambience */}
+      <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-transparent via-[#111] to-black opacity-40 z-0" />
+      
+      {/* 3D Scene */}
+      <div className="w-full h-full">
+        <Canvas 
+          shadows 
+          dpr={[1, 2]} 
+          camera={{ position: [0, 0, 40], fov: 50, near: 0.1, far: 1000 }}
+          gl={{ 
+            antialias: true,
+            alpha: true,
+            powerPreference: "high-performance",
+            stencil: false,
+            depth: true
+          }}
+        >
+          <color attach="background" args={['#0f0f0f']} />
+          <Suspense fallback={null}>
+            <Experience 
+              isStarted={isStarted}
+              audioEnabled={effectiveAudioEnabled} 
+              isGridMode={isGridMode}
+              visibleLines={visibleLines}
+              journeyState={journeyState}
+              onFocusClear={handleFocusClear}
+              onPlaneClick={handlePlaneClick}
+              onOpenInfo={handleOpenInfo}
+              onPlanesLoaded={handlePlanesLoaded}
+              onJourneyLineClick={handleJourneyLineClick}
+              onCenterPoint={setIsPointingAtPlane}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+          </Suspense>
+        </Canvas>
+      </div>
+
+      {/* 2D UI Overlay */}
+      <HUD 
+          isStarted={isStarted}
+          audioEnabled={audioEnabled} 
+          onToggleAudio={setAudioEnabled} 
+          activeProjectInfo={activeProjectInfo}
+          onCloseInfo={() => { setActiveProjectInfo(null); setJourneyState(null); }}
+          isGridMode={isGridMode}
+          onToggleGridMode={() => setIsGridMode(!isGridMode)}
+          visibleLines={visibleLines}
+          onToggleLine={toggleLine}
+          journeyState={journeyState}
+          onNextJourney={handleNextJourney}
+          onPrevJourney={handlePrevJourney}
+          maxStep={journeyState ? categoryCounts[journeyState.category] - 1 : 0}
+          isPointingAtPlane={isPointingAtPlane}
+          onOpenContact={() => setIsContactOpen(true)}
+      />
+    </main>
   );
 }

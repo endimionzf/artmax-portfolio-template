@@ -21,6 +21,8 @@
 /build
 /public/portfolio
 /hostico-deploy
+/deploy
+/deploy_tmp
 # misc
 .DS_Store
 *.pem

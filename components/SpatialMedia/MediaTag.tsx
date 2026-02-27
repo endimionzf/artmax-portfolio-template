@@ -5,11 +5,12 @@ import * as THREE from 'three';
 interface MediaTagProps {
     category: 'video' | '3d' | 'ai';
     isGridMode: boolean;
+    isFocused: boolean;
     parentOpacity: number;
     planeScale: number;
 }
 
-export const MediaTag = ({ category, isGridMode, parentOpacity, planeScale }: MediaTagProps) => {
+export const MediaTag = ({ category, isGridMode, isFocused, parentOpacity, planeScale }: MediaTagProps) => {
     const meshRef = useRef<THREE.Mesh>(null);
     const materialRef = useRef<THREE.MeshBasicMaterial>(null);
     const iconMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
@@ -19,7 +20,9 @@ export const MediaTag = ({ category, isGridMode, parentOpacity, planeScale }: Me
         if (!materialRef.current || !meshRef.current) return;
 
         // 1. Sync Opacity (Lerp to match parent's target)
-        materialRef.current.opacity = THREE.MathUtils.lerp(materialRef.current.opacity, parentOpacity * 0.95, delta * 8);
+        // If focused, we want 0 opacity regardless of parent state
+        const targetOpacity = isFocused ? 0 : parentOpacity * 0.95;
+        materialRef.current.opacity = THREE.MathUtils.lerp(materialRef.current.opacity, targetOpacity, delta * 8);
         if (iconMaterialRef.current) iconMaterialRef.current.opacity = materialRef.current.opacity;
         if (iconMaterialRef2.current) iconMaterialRef2.current.opacity = materialRef.current.opacity;
 

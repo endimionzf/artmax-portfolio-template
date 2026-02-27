@@ -12,6 +12,78 @@ import { CameraRig } from './Navigation/CameraRig';
 import { Effects } from './Effects';
 import { JourneyLines } from './JourneyLines';
 import { DustParticles } from './DustParticles';
+import { HiddenPlanet } from './Minigame/HiddenPlanet';
+
+function FadeOverlay({ opacity }: { opacity: number }) {
+    const { camera } = useThree();
+    const meshRef = useRef<THREE.Mesh>(null);
+
+    useFrame(() => {
+        if (meshRef.current) {
+            // Stay fixed in front of camera
+            const v = new THREE.Vector3(0, 0, -0.2); // Very close to near plane
+            v.applyQuaternion(camera.quaternion);
+            v.add(camera.position);
+            meshRef.current.position.copy(v);
+            meshRef.current.quaternion.copy(camera.quaternion);
+        }
+    });
+
+    return (
+        <mesh ref={meshRef} frustumCulled={false}>
+            <planeGeometry args={[2, 2]} />
+            <meshBasicMaterial 
+                color="black" 
+                transparent 
+                opacity={opacity} 
+                depthTest={false}
+                depthWrite={false}
+            />
+        </mesh>
+    );
+}
+
+// Sub-component to darken the background when in Focus mode
+function FocusDarkener({ isFocused, isGridMode }: { isFocused: boolean, isGridMode: boolean }) {
+    const { camera } = useThree();
+    const meshRef = useRef<THREE.Mesh>(null);
+    const targetOpacity = isFocused ? 0.85 : 0; // 85% darkness
+    
+    useFrame((_, delta) => {
+        if (meshRef.current) {
+            // Keep it fixed to the camera.
+            // In Grid mode, videos are co-planar, so we slip the darkener right behind the focused item (-4.5).
+            // In Explorer mode, videos have extreme 3D depth, so we push it way back (-15.0).
+            const targetZ = isGridMode ? -4.5 : -15.0;
+            const v = new THREE.Vector3(0, 0, targetZ); 
+            v.applyQuaternion(camera.quaternion);
+            v.add(camera.position);
+            meshRef.current.position.copy(v);
+            meshRef.current.quaternion.copy(camera.quaternion);
+            
+            // Smoothly animate opacity
+            const material = meshRef.current.material as THREE.MeshBasicMaterial;
+            material.opacity = THREE.MathUtils.lerp(material.opacity, targetOpacity, delta * 5);
+            
+            // Optimization: hide entirely if opacity is near zero
+            meshRef.current.visible = material.opacity > 0.01;
+        }
+    });
+
+    return (
+        <mesh ref={meshRef} frustumCulled={false}>
+            {/* Scale up massively so it covers the whole screen even pushed 15 units back */}
+            <planeGeometry args={[200, 200]} />
+            <meshBasicMaterial 
+                color="black"  
+                transparent 
+                opacity={0} 
+                depthTest={false}
+                depthWrite={false}
+            />
+        </mesh>
+    );
+}
 
 // Hooks & Utils
 import { useJourneyPath, type PlaneData } from '@/hooks/use-journey-path';
@@ -23,12 +95,15 @@ interface ExperienceProps {
     isStarted: boolean;
     visibleLines: string[];
     journeyState?: { category: 'video' | '3d' | 'ai', step: number } | null;
-    onOpenInfo: (title: string) => void;
+    onOpenInfo: (plane: any) => void;
     onFocusClear?: () => void;
     onJourneyLineClick?: (category: 'video' | '3d' | 'ai') => void;
     onPlaneClick?: (category: 'video' | '3d' | 'ai', indexInCategory: number) => void;
     onPlanesLoaded?: (planes: PlaneData[]) => void;
     onCenterPoint?: (focused: boolean) => void;
+    isInfoOpen?: boolean;
+    minigameStatus?: 'idle' | 'invited' | 'active' | 'won' | 'rejected' | 'completed';
+    onDiscountUnlocked?: () => void;
 }
 
 export function Experience({ 
@@ -42,7 +117,10 @@ export function Experience({
     onJourneyLineClick, 
     onPlaneClick, 
     onPlanesLoaded,
-    onCenterPoint 
+    onCenterPoint,
+    isInfoOpen = false,
+    minigameStatus = 'idle',
+    onDiscountUnlocked
 }: ExperienceProps) {
     const { camera, viewport } = useThree();
     const [listener] = useState(() => new THREE.AudioListener());
@@ -50,11 +128,86 @@ export function Experience({
     const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
     const [currentCamZ, setCurrentCamZ] = useState(20);
     const [currentCamY, setCurrentCamY] = useState(0);
+    const [isGizmoDragging, setIsGizmoDragging] = useState(false);
     const dragStatus = useRef({ hasMoved: false });
     const lastCamZRef = useRef(20);
     const lastCamYRef = useRef(0);
 
-    // 1. Audio Session Management
+    useEffect(() => {
+        camera.add(listener);
+        return () => {
+            camera.remove(listener);
+        };
+    }, [camera, listener]);
+
+    // Transition State
+    const [displayedIsGridMode, setDisplayedIsGridMode] = useState(isGridMode);
+    const [displayedVisibleLines, setDisplayedVisibleLines] = useState(visibleLines);
+    const [fadeOpacity, setFadeOpacity] = useState(0);
+    const isTransitioning = useRef(false);
+
+    useEffect(() => {
+        // Triggered when props change
+        if (isGridMode === displayedIsGridMode && 
+            JSON.stringify(visibleLines) === JSON.stringify(displayedVisibleLines)) return;
+        
+        // If we are merely changing tags in Explorer mode, update instantly without fading
+        if (!isGridMode && !displayedIsGridMode) {
+            setDisplayedVisibleLines(visibleLines);
+            return;
+        }
+
+        // If we are exiting Grid Mode to Explorer, skip the fade and update instantly
+        if (!isGridMode && displayedIsGridMode) {
+            setDisplayedIsGridMode(false);
+            setDisplayedVisibleLines(visibleLines);
+            setFadeOpacity(0);
+            isTransitioning.current = false;
+            return;
+        }
+
+        if (isTransitioning.current) return;
+        isTransitioning.current = true;
+
+        // Timeline:
+        // 0.0 - 0.4: Fade to 1
+        // 0.4 - 0.5: Stay at 1, swap state
+        // 0.5 - 0.9: Fade to 0
+        
+        let start: number | null = null;
+        const duration = 1000; // 1 second total cycle
+        
+        let stateSwapped = false;
+
+        const animate = (time: number) => {
+            if (!start) start = time;
+            const elapsed = time - start;
+            const p = elapsed / duration;
+
+            if (p < 0.4) {
+                // Fade In (to black)
+                setFadeOpacity(p / 0.4);
+            } else if (p < 0.5) {
+                setFadeOpacity(1);
+                if (!stateSwapped) {
+                    setDisplayedIsGridMode(isGridMode);
+                    setDisplayedVisibleLines(visibleLines);
+                    stateSwapped = true;
+                }
+            } else if (p < 0.9) {
+                // Fade Out (to clear)
+                setFadeOpacity(1 - (p - 0.5) / 0.4);
+            } else {
+                setFadeOpacity(0);
+                isTransitioning.current = false;
+                return;
+            }
+            requestAnimationFrame(animate);
+        };
+        requestAnimationFrame(animate);
+
+    }, [isGridMode, visibleLines]); // eslint-disable-line react-hooks/exhaustive-deps
+
     useEffect(() => {
         if (isStarted && listener.context.state === 'suspended') {
             console.log("[Experience] Attempting to resume AudioContext...");
@@ -63,6 +216,52 @@ export function Experience({
             });
         }
     }, [isStarted, listener]);
+
+    // 1b. Global Audio Effects (Muffling)
+    const filterRef = useRef<BiquadFilterNode | null>(null);
+    useEffect(() => {
+        if (!listener.context) return;
+        
+        // Create low-pass filter for muffling
+        const filter = listener.context.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 20000; // Default wide open
+        filter.Q.value = 1;
+        
+        // Master Insert Strategy:
+        // Intercept the final output of the Three.js AudioListener. 
+        // We disconnect the listener.gain from the destination and insert our filter.
+        try {
+            listener.gain.disconnect();
+            listener.gain.connect(filter);
+            filter.connect(listener.context.destination);
+            filterRef.current = filter;
+            console.log("[Audio] Master Muffling Inserted");
+        } catch (e) {
+            console.error("[Audio] Failed to insert master filter:", e);
+        }
+
+        return () => {
+            try {
+                filter.disconnect();
+                listener.gain.disconnect();
+                listener.gain.connect(listener.context.destination);
+                filterRef.current = null;
+                console.log("[Audio] Master Muffling Removed");
+            } catch (e) {
+                console.error("[Audio] Failed to restore audio path:", e);
+            }
+        };
+    }, [listener]);
+
+    // Handle muffling transitions
+    useEffect(() => {
+        if (!filterRef.current || !listener.context) return;
+        const targetFreq = isInfoOpen ? 400 : 20000;
+        // Use a faster ramp for the activation, slower for deactivation
+        const rampTime = isInfoOpen ? 0.05 : 0.2; 
+        filterRef.current.frequency.setTargetAtTime(targetFreq, listener.context.currentTime, rampTime);
+    }, [isInfoOpen, listener]);
 
     // 2. Fetch and Initialize Data
     useEffect(() => {
@@ -174,31 +373,67 @@ export function Experience({
         });
     }, [useGenerator, seed, spreadXY, clusterSize, spacerSize, clusterSpacing, spacerSpacing, noiseZ, planes.length, viewport.width, viewport.height]);
 
-    const [gridPositions, scrollYRange] = useMemo(() => {
-        const cols = viewport.width > viewport.height ? 3 : (viewport.width > viewport.height * 0.7 ? 2 : 1); 
+    // List of planes actually visible in the current mode
+    const filteredPlanes = useMemo(() => {
+        if (!displayedIsGridMode) return planes;
+        // If no filter is selected, show everything. Otherwise, only show selected categories.
+        if (displayedVisibleLines.length === 0) return planes;
+        
+        return planes.filter(p => {
+            if (p.category === 'video' && displayedVisibleLines.includes('video')) return true;
+            if (p.category === '3d' && displayedVisibleLines.includes('3d')) return true;
+            if (p.category === 'ai' && displayedVisibleLines.includes('ai')) return true;
+            return false;
+        });
+    }, [planes, displayedIsGridMode, displayedVisibleLines]);
+
+    const [gridPositionsMap, scrollYRange, gridMeta] = useMemo(() => {
+        const isWidescreen = viewport.width > viewport.height;
+        const cols = isWidescreen ? 3 : 1;
+        const rows = isWidescreen ? 2 : 3;
+        const itemsPerPage = cols * rows;
+        
         const spacingX = 5.2;
         const spacingY = -3.2;
 
-        const numRows = Math.ceil(planes.length / cols);
-        const offsetX = (cols - 1) * spacingX / 2;
-        const offsetY = (numRows - 1) * spacingY / 2;
+        const numPages = Math.ceil(filteredPlanes.length / itemsPerPage);
+        const positionMap = new Map<number, [number, number, number]>();
+        
+        filteredPlanes.forEach((plane, i) => {
+            const pageIndex = Math.floor(i / itemsPerPage);
+            const indexInPage = i % itemsPerPage;
+            
+            const col = indexInPage % cols;
+            const row = Math.floor(indexInPage / cols);
+            
+            // Center each page vertically
+            const pageOffsetY = (rows - 1) * spacingY / 2;
+            const pageOffsetX = (cols - 1) * spacingX / 2;
 
-        const positions = planes.map((_, i) => [
-            (i % cols) * spacingX - offsetX,
-            Math.floor(i / cols) * spacingY - offsetY,
-            0
-        ] as [number, number, number]);
+            // Each page is separated by a large vertical gap (e.g., 20 units)
+            const pageVerticalGap = 15; 
+            
+            positionMap.set(plane.id, [
+                col * spacingX - pageOffsetX,
+                (row * spacingY - pageOffsetY) - (pageIndex * pageVerticalGap),
+                0
+            ]);
+        });
 
-        return [positions, [-offsetY, (numRows - 1) * spacingY - offsetY]] as const;
-    }, [planes.length, viewport.width, viewport.height]);
+        // The scroll range covers all pages
+        const lastPageY = -((numPages - 1) * 15);
+        
+        return [positionMap, [0, lastPageY], { itemsPerPage, numPages, pageGap: 15 }] as const;
+    }, [filteredPlanes, viewport.width, viewport.height]);
     
     // Calculate lateral bounds for camera wandering
     const cameraBounds = useMemo(() => {
-        if (planes.length === 0) return { minX: -20, maxX: 20, minY: -20, maxY: 20 };
+        if (filteredPlanes.length === 0) return { minX: -20, maxX: 20, minY: -20, maxY: 20 };
         
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-        planes.forEach((plane, i) => {
-            const pos = isGridMode ? gridPositions[i] : plane.position;
+        filteredPlanes.forEach((plane) => {
+            const pos = displayedIsGridMode ? gridPositionsMap.get(plane.id) : plane.position;
+            if (!pos) return;
             minX = Math.min(minX, pos[0]);
             maxX = Math.max(maxX, pos[0]);
             minY = Math.min(minY, pos[1]);
@@ -206,22 +441,29 @@ export function Experience({
         });
         
         const margin = 1;
+        if (minX === Infinity) return { minX: -20, maxX: 20, minY: -20, maxY: 20 };
         return {
             minX: minX - margin,
             maxX: maxX + margin,
             minY: minY - margin,
             maxY: maxY + margin
         };
-    }, [planes, gridPositions, isGridMode]);
+    }, [filteredPlanes, gridPositionsMap, displayedIsGridMode]);
 
     // Handle slideshow transitions
     useEffect(() => {
         if (journeyState && planes.length > 0) {
             const catPlanes = planes.filter(p => p.category === journeyState.category);
             const target = catPlanes[Math.max(0, Math.min(journeyState.step, catPlanes.length - 1))];
-            if (target) setFocusedIndex(planes.findIndex(p => p.id === target.id));
+            if (target) {
+                const targetIndex = planes.findIndex(p => p.id === target.id);
+                if (focusedIndex !== targetIndex) setFocusedIndex(targetIndex);
+            }
+        } else if (!journeyState && focusedIndex !== null) {
+            // Clear local focus if journey is cleared externally
+            setFocusedIndex(null);
         }
-    }, [journeyState, planes]);
+    }, [journeyState, planes, focusedIndex]);
 
     // 5. Central Raycasting for HUD feedback
     const raycaster = useMemo(() => new THREE.Raycaster(), []);
@@ -261,7 +503,7 @@ export function Experience({
     return (
         <>
             {planes.length > 0 && (
-                <ScrollControls pages={planes.length * 0.7} damping={0.2} enabled={!focusedIndex && !editorMode}> 
+                <ScrollControls pages={isGridMode ? gridMeta.numPages * 2 : gridMeta.numPages} damping={0.2} enabled={!focusedIndex && !editorMode}> 
                     {editorMode ? (
                         <OrthographicCamera 
                             makeDefault 
@@ -275,22 +517,24 @@ export function Experience({
                         <CameraRig 
                             isStarted={isStarted}
                             editorMode={editorMode} 
-                            focusTarget={focusedIndex !== null ? (isGridMode ? gridPositions[focusedIndex] : planes[focusedIndex].position) : null} 
-                            isGridMode={isGridMode}
+                            focusTarget={focusedIndex !== null ? (displayedIsGridMode ? (gridPositionsMap.get(planes[focusedIndex].id) || null) : planes[focusedIndex].position) : null} 
+                            isGridMode={displayedIsGridMode}
                             scrollYRange={scrollYRange}
-                            totalPlanes={planes.length}
+                            totalPlanes={filteredPlanes.length}
                             activeCurve={activeCameraCurve}
                             journeyState={journeyState}
                             dragStatus={dragStatus}
                             listener={listener}
                             lastPlaneZ={planes[planes.length - 1]?.position[2] || 0}
                             bounds={cameraBounds}
+                            isGizmoDragging={isGizmoDragging}
+                            isGameActive={minigameStatus === 'active'}
                         />
                     )}
                     
-                    {focusedIndex !== null && !editorMode && (
+                        {focusedIndex !== null && !editorMode && (
                         <mesh 
-                            position={[0, 0, (isGridMode ? gridPositions[focusedIndex][2] : planes[focusedIndex].position[2]) - 0.1]}
+                            position={[0, 0, (displayedIsGridMode ? (gridPositionsMap.get(planes[focusedIndex].id)?.[2] || 0) : planes[focusedIndex].position[2]) - 0.1]}
                             onClick={(e) => {
                                 e.stopPropagation();
                                 setFocusedIndex(null);
@@ -309,22 +553,21 @@ export function Experience({
                         render3dCurve={journeyCurves.render3d}
                         aiCurve={journeyCurves.ai}
                         onLineClick={onJourneyLineClick}
+                        onGizmoDragStatus={setIsGizmoDragging}
                     />
 
                     {planes.map((plane, index) => {
-                        const isVisible = visibleLines.length === 0 || visibleLines.includes(plane.category);
-                        if (!isVisible && !editorMode) return null;
+                        // In grid mode, only show filtered planes
+                        const gridPos = gridPositionsMap.get(plane.id);
+                        if (displayedIsGridMode && !gridPos) return null;
 
-                        // Component-level Culling: Avoid mounting if way out of bounds
-                        const zPos = isGridMode ? gridPositions[index][2] : plane.position[2];
-                        const yPos = isGridMode ? gridPositions[index][1] : plane.position[1];
+                        const zPos = displayedIsGridMode ? gridPos![2] : plane.position[2];
+                        const yPos = displayedIsGridMode ? gridPos![1] : plane.position[1];
 
                         let isFar = false;
-                        if (isGridMode) {
-                            // Vertical window for grid (50 units = ~15+ rows)
+                        if (displayedIsGridMode) {
                             isFar = Math.abs(yPos - currentCamY) > 50;
                         } else {
-                            // Depth window for explorer (250 units to support 120-unit intro fly-in)
                             isFar = Math.abs(zPos - currentCamZ) > 250;
                         }
 
@@ -343,15 +586,15 @@ export function Experience({
                                 editorMode={editorMode}
                                 isFocused={focusedIndex === index}
                                 isAnyFocused={focusedIndex !== null}
-                                isGridMode={isGridMode}
+                                isGridMode={displayedIsGridMode}
                                 listener={listener}
-                                targetPosition={isGridMode ? gridPositions[index] : plane.position}
+                                targetPosition={displayedIsGridMode ? gridPos! : plane.position}
                                 onPositionChange={(newPos) => setPlanes(prev => {
                                     const next = [...prev];
                                     next[index] = { ...next[index], position: newPos };
                                     return next;
                                 })}
-                                onOpenInfo={() => onOpenInfo(plane.title)}
+                                onOpenInfo={() => onOpenInfo(plane)}
                                 onClick={(e) => {
                                     if (dragStatus.current.hasMoved) return;
                                     e.stopPropagation();
@@ -365,8 +608,7 @@ export function Experience({
                                     }
                                 }}
                                 onPointerOver={(e: any) => {
-                                    if (isGridMode) return; // Disable hover effects in Grid Mode
-                                    const actualPlaneZ = isGridMode ? gridPositions[index][2] : plane.position[2];
+                                    if (displayedIsGridMode) return; 
                                 }}
                                 onPointerOut={() => {}}
                             />
@@ -388,8 +630,18 @@ export function Experience({
                         <meshBasicMaterial transparent opacity={0} depthTest={false} />
                     </mesh>
 
-                    {!editorMode && <Effects isFocused={focusedIndex !== null} focusTarget={focusedIndex !== null ? planes[focusedIndex].position : null} isGridMode={isGridMode} />}
+                    {!editorMode && <Effects isFocused={focusedIndex !== null} focusTarget={focusedIndex !== null ? planes[focusedIndex].position : null} isGridMode={displayedIsGridMode} />}
                     <DustParticles depth={650} />
+
+                    <HiddenPlanet 
+                        isGameActive={minigameStatus === 'active'} 
+                        onDiscover={() => {
+                            if (onDiscountUnlocked) onDiscountUnlocked();
+                        }}
+                    />
+
+                    <FocusDarkener isFocused={focusedIndex !== null} isGridMode={displayedIsGridMode} />
+                    <FadeOverlay opacity={fadeOpacity} />
                 </ScrollControls>
             )}
         </>

@@ -6,7 +6,7 @@ export function DustParticles({ depth = 650 }: { depth?: number }) {
   const pointsRef = useRef<THREE.Points>(null);
 
   // Refined Atmospheric settings
-  const count = 1500;
+  const count = 3000;
   const size = 0.45;
   const speed = 1.5;
   const opacity = 0.08;
@@ -20,9 +20,9 @@ export function DustParticles({ depth = 650 }: { depth?: number }) {
 
     for (let i = 0; i < count; i++) {
         // Uniform tunnel distribution
-        // X and Y spread narrowed to wrap more tightly around the media (approx +/- 20 and +/- 17.5)
-        positions[i * 3] = (Math.random() - 0.5) * 40;
-        positions[i * 3 + 1] = (Math.random() - 0.5) * 35;
+        // Extended massive boundaries for the minigame 
+        positions[i * 3] = (Math.random() - 0.5) * 800;
+        positions[i * 3 + 1] = (Math.random() - 0.5) * 600;
         // Z distribution from just behind the camera (50) to the far depth
         positions[i * 3 + 2] = 50 - (Math.random() * depth);
 

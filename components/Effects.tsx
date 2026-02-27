@@ -69,7 +69,7 @@ export function Effects({ isFocused, focusTarget, isGridMode }: { isFocused: boo
                 smoothTime={0.4}
                 focalLength={focalLength} 
                 focusRange={focusRange}
-                bokehScale={bokehScale} 
+                bokehScale={(isGridMode || isFocused) ? 0 : bokehScale} 
             />
             <Vignette eskil={eskil} offset={vignetteOffset} darkness={animatedDarkness} />
             <Noise opacity={noiseOpacity} premultiply={noisePremultiply} />

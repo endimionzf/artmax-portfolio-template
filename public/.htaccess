@@ -1,0 +1,26 @@
+RewriteEngine On
+RewriteBase /
+
+# 1. PHYSICAL FILES & SUBDIRECTORIES (SKIP NODE)
+# If the request is for an actual file OR an actual folder, serve it directly.
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Explicit skip for known subdirectories (Optional: Add more folders here)
+RewriteRule ^(fetedeimprumut)($|/) - [L]
+
+# 2. NODE.JS / PASSENGER SETUP (Directs all other traffic to your Next.js app)
+<IfModule mod_passenger.c>
+    PassengerAppRoot "/home/msvdlfot/public_html/artmax-app"
+    PassengerBaseURI "/"
+    PassengerAppType node
+    PassengerStartupFile "server.js"
+</IfModule>
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.(ttf|otf|eot|woff|woff2|ico|png|jpg|jpeg|svg|js|css)$">
+    Header set Access-Control-Allow-Origin "*"
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>

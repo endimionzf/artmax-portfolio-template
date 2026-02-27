@@ -5,6 +5,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { useControls } from 'leva';
+import { joystickState } from '@/components/Joystick';
 
 export interface CameraRigProps {
     editorMode: boolean;
@@ -19,6 +20,8 @@ export interface CameraRigProps {
     lastPlaneZ: number;
     bounds?: { minX: number; maxX: number; minY: number; maxY: number } | null;
     isStarted: boolean;
+    isGizmoDragging?: boolean;
+    isGameActive?: boolean;
 }
 
 export function CameraRig({ 
@@ -33,10 +36,12 @@ export function CameraRig({
     listener,
     lastPlaneZ,
     bounds,
-    isStarted
+    isStarted,
+    isGizmoDragging,
+    isGameActive
 }: CameraRigProps) {
     const scroll = useScroll();
-    const { camera, viewport } = useThree();
+    const { camera, size } = useThree();
     const dragOffset = useRef(new THREE.Vector2(0, 0));
     const isDragging = useRef(false);
     const lastPointer = useRef(new THREE.Vector2(0, 0));
@@ -77,18 +82,18 @@ export function CameraRig({
     useEffect(() => {
         if (camera instanceof THREE.PerspectiveCamera) {
             // Override Leva config dynamically on mobile resolutions
-            const isMobile = viewport.width <= viewport.height * 0.7 || viewport.width <= 12;
+            const isMobile = size.width < 768;
             const targetFov = (isGridMode && isMobile) ? 75 : fov;
 
             camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, 0.1); 
             camera.updateProjectionMatrix();
         }
-    }, [camera, fov, isGridMode, viewport.width, viewport.height]);
+    }, [camera, fov, isGridMode, size.width]);
 
     // Force animation frame loop to continuously lerp FOV smoothly when state changes
     useFrame(() => {
         if (camera instanceof THREE.PerspectiveCamera) {
-            const isMobile = viewport.width <= viewport.height * 0.7 || viewport.width <= 12;
+            const isMobile = size.width < 768;
             const targetFov = (isGridMode && isMobile) ? 75 : fov;
             
             if (Math.abs(camera.fov - targetFov) > 0.1) {
@@ -119,17 +124,20 @@ export function CameraRig({
         
         if (editorMode || focusTarget) return; 
 
-        const handleDown = (e: PointerEvent) => {
-            if (!isStarted || e.button !== 0) return; 
-            isDragging.current = true;
-            lastPointer.current.set(e.clientX, e.clientY);
-            if (dragStatus) dragStatus.current.hasMoved = false;
-            didInteract.current = true;
-        };
+    const handleDown = (e: PointerEvent) => {
+        // Prevent X/Y drag when user is grabbing the joystick
+        if (joystickState.active) return;
         
-        const handleMove = (e: PointerEvent) => {
-            if (!isDragging.current || !isStarted) return;
-            const dx = e.clientX - lastPointer.current.x;
+        if (!isStarted || e.button !== 0 || isGizmoDragging) return; 
+        isDragging.current = true;
+        lastPointer.current.set(e.clientX, e.clientY);
+        if (dragStatus) dragStatus.current.hasMoved = false;
+        didInteract.current = true;
+    };
+    
+    const handleMove = (e: PointerEvent) => {
+        if (!isDragging.current || !isStarted || isGizmoDragging) return;
+        const dx = e.clientX - lastPointer.current.x;
             const dy = e.clientY - lastPointer.current.y;
             
             if (dragStatus && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
@@ -158,15 +166,18 @@ export function CameraRig({
             window.removeEventListener('pointermove', handleMove);
             window.removeEventListener('pointerup', handleUp);
         };
-    }, [editorMode, focusTarget, dragSensitivity, dragStatus, isStarted]);
+    }, [editorMode, focusTarget, dragSensitivity, dragStatus, isStarted, isGizmoDragging]);
 
     // Custom Scroll Handling
     useEffect(() => {
         if (!scroll.el) return;
         const el = scroll.el;
+        
+        // Disable native touch scrolling on mobile to unlock X/Y drag
+        el.style.touchAction = 'none';
 
         const handleWheel = (e: WheelEvent) => {
-            if (focusTarget || !isStarted) return;
+            if (focusTarget || !isStarted || isGizmoDragging) return;
             e.preventDefault();
             
             if (isGridMode) {
@@ -179,7 +190,7 @@ export function CameraRig({
 
         el.addEventListener('wheel', handleWheel, { passive: false });
         return () => el.removeEventListener('wheel', handleWheel);
-    }, [scroll.el, isGridMode, focusTarget, isStarted]);
+    }, [scroll.el, isGridMode, focusTarget, isStarted, isGizmoDragging]);
 
     // Center the camera drag when transitioning into Grid Mode
     const lastGridMode = useRef(isGridMode);
@@ -212,7 +223,11 @@ export function CameraRig({
             if (state.camera instanceof THREE.PerspectiveCamera) {
                 const fovRadian = state.camera.fov * (Math.PI / 180);
                 const planeHeightWithMargin = 2.7 * 1.4;
-                const planeWidthWithMargin = 4.8 * 1.15;
+                // Add conditional padding for portrait/mobile to prevent excessive zooming
+                const isPortrait = state.size.width < state.size.height;
+                const widthMargin = isPortrait ? 1.4 : 1.15; // 40% margin on mobile vs 15% on desktop
+                const planeWidthWithMargin = 4.8 * widthMargin;
+                
                 const requiredZForHeight = (planeHeightWithMargin / 2) / Math.tan(fovRadian / 2);
                 const requiredZForWidth = (planeWidthWithMargin / state.camera.aspect / 2) / Math.tan(fovRadian / 2);
                 optimalZOffset = Math.max(4.0, requiredZForHeight - 2.0, requiredZForWidth - 2.0);
@@ -239,7 +254,10 @@ export function CameraRig({
             if (state.camera instanceof THREE.PerspectiveCamera) {
                 const fovRadian = state.camera.fov * (Math.PI / 180);
                 const planeHeightWithMargin = 2.7 * 1.4;
-                const planeWidthWithMargin = 4.8 * 1.15;
+                const isPortrait = state.size.width < state.size.height;
+                const widthMargin = isPortrait ? 1.4 : 1.15; 
+                const planeWidthWithMargin = 4.8 * widthMargin;
+                
                 const requiredZForHeight = (planeHeightWithMargin / 2) / Math.tan(fovRadian / 2);
                 const requiredZForWidth = (planeWidthWithMargin / state.camera.aspect / 2) / Math.tan(fovRadian / 2);
                 optimalZOffset = Math.max(4.0, requiredZForHeight - 2.0, requiredZForWidth - 2.0);
@@ -260,24 +278,20 @@ export function CameraRig({
             
         } else if (isGridMode && scrollYRange) {
             const [topY, bottomY] = scrollYRange;
-            const margin = 1.35 + 0.5;
-            const visibleHeightHalf = 4.195;
             
-            const scrollStartY = topY + margin - visibleHeightHalf + 1.2; 
-            const scrollEndY = bottomY - margin + visibleHeightHalf;
-            
-            let targetY = 0;
-            if (scrollStartY > scrollEndY) {
-                 targetY = THREE.MathUtils.lerp(scrollStartY, scrollEndY, scroll.offset);
-            } else {
-                 targetY = 0;
-            }
+            // Calculate discrete page based on scroll offset
+            // We know page gap is 15 from Experience.tsx
+            const pageGap = 15;
+            const numPages = Math.round(Math.abs(bottomY - topY) / pageGap) + 1;
+            const currentPage = Math.round(scroll.offset * (numPages - 1));
+            const targetPageY = topY - (currentPage * pageGap);
 
-            state.camera.position.z = THREE.MathUtils.lerp(state.camera.position.z, 9, baseStep);
+            state.camera.position.z = THREE.MathUtils.lerp(state.camera.position.z, 10, baseStep);
             state.camera.position.x = THREE.MathUtils.lerp(state.camera.position.x, 0, baseStep); 
-            state.camera.position.y = THREE.MathUtils.lerp(state.camera.position.y, targetY, baseStep);
+            // Smoothly snap to the target page Y
+            state.camera.position.y = THREE.MathUtils.lerp(state.camera.position.y, targetPageY, baseStep);
             
-            dragOffset.current.set(0, targetY);
+            dragOffset.current.set(0, state.camera.position.y);
 
         } else {
             // Explore Mode
@@ -287,7 +301,7 @@ export function CameraRig({
                 introOffset.current = THREE.MathUtils.lerp(introOffset.current, 0, delta * 0.8);
             }
 
-            const isIdle = (state.clock.elapsedTime - lastInteraction.current) > 10;
+            const isIdle = (state.clock.elapsedTime - lastInteraction.current) > 30;
             if (isIdle && !isGridMode && !focusTarget && isStarted) {
                 // Auto-Pilot Glide
                 if (scroll.el) {
@@ -332,12 +346,35 @@ export function CameraRig({
                     if (scroll.el) scroll.el.scrollTop -= 20;
                     lastInteraction.current = state.clock.elapsedTime;
                 }
+                
+                // Read from mobile joystick
+                if (joystickState.active && scroll.el) {
+                    scroll.el.scrollTop += joystickState.y * 5; // Slower, smoother
+                    lastInteraction.current = state.clock.elapsedTime;
+                    didInteract.current = true;
+                }
             }
 
             // Apply Lateral Bounds clamping
             if (bounds) {
-                dragOffset.current.x = THREE.MathUtils.clamp(dragOffset.current.x, bounds.minX, bounds.maxX);
-                dragOffset.current.y = THREE.MathUtils.clamp(dragOffset.current.y, bounds.minY, bounds.maxY);
+                let limitXMin = bounds.minX;
+                let limitXMax = bounds.maxX;
+                let limitYMin = bounds.minY;
+                let limitYMax = bounds.maxY;
+
+                if (isGameActive) {
+                    const width = (bounds.maxX - bounds.minX) * 30;
+                    const height = (bounds.maxY - bounds.minY) * 30;
+                    const cx = (bounds.maxX + bounds.minX) / 2;
+                    const cy = (bounds.maxY + bounds.minY) / 2;
+                    limitXMin = cx - width / 2;
+                    limitXMax = cx + width / 2;
+                    limitYMin = cy - height / 2;
+                    limitYMax = cy + height / 2;
+                }
+
+                dragOffset.current.x = THREE.MathUtils.clamp(dragOffset.current.x, limitXMin, limitXMax);
+                dragOffset.current.y = THREE.MathUtils.clamp(dragOffset.current.y, limitYMin, limitYMax);
             }
 
             const deltaScroll = scroll.offset - lastScrollOffset.current;

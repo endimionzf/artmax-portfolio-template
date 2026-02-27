@@ -6,19 +6,27 @@ import { Canvas } from '@react-three/fiber';
 import { Experience } from '@/components/Experience';
 import { Suspense, useState, useEffect, useCallback } from 'react';
 import { HUD } from '@/components/HUD';
+import { Joystick } from '@/components/Joystick';
 import { Leva } from 'leva';
 import { resumeAudioContext } from '@/hooks/use-spatial-audio';
 import { ResourceMonitor } from '@/components/ResourceMonitor';
 import { videoPool } from '@/hooks/use-video-pool';
+import { MinigameUI } from '@/components/Minigame/MinigameUI';
 
 
 export default function Home() {
   const [audioEnabled, setAudioEnabled] = useState(false);
-  const [activeProjectInfo, setActiveProjectInfo] = useState<{ title: string } | null>(null);
+  const [activeProjectInfo, setActiveProjectInfo] = useState<any | null>(null);
+  const [currentPlanes, setCurrentPlanes] = useState<any[]>([]);
   const [isGridMode, setIsGridMode] = useState(false);
   const [visibleLines, setVisibleLines] = useState<string[]>([]);
   const [isStarted, setIsStarted] = useState(false);
   const [isContactOpen, setIsContactOpen] = useState(false);
+  const [isInfoOpen, setIsInfoOpen] = useState(false);
+  
+  // Game State
+  const [minigameStatus, setMinigameStatus] = useState<'idle' | 'invited' | 'active' | 'won' | 'rejected' | 'completed'>('idle');
+  const [radarButtonVisible, setRadarButtonVisible] = useState(false);
   
   // Production Readiness: Hide Leva unless ?debug=true is present
   const [showDebug, setShowDebug] = useState(false);
@@ -50,6 +58,7 @@ export default function Home() {
   }, [journeyState]);
 
   const handlePlanesLoaded = useCallback((planes: any[]) => {
+      setCurrentPlanes(planes);
       setCategoryCounts({
           video: planes.filter(p => p.category === 'video').length,
           '3d': planes.filter(p => p.category === '3d').length,
@@ -59,14 +68,16 @@ export default function Home() {
 
   const handleFocusClear = useCallback(() => {
       setActiveProjectInfo(null);
+      setJourneyState(null);
+      setIsInfoOpen(false);
   }, []);
 
   const handlePlaneClick = useCallback((category: 'video'|'3d'|'ai', indexInCategory: number) => {
       setJourneyState({ category, step: indexInCategory });
   }, []);
 
-  const handleOpenInfo = useCallback((title: string) => {
-      setActiveProjectInfo({ title });
+  const handleOpenInfo = useCallback((planeData: any) => {
+      setActiveProjectInfo(planeData);
   }, []);
 
   const handleJourneyLineClick = useCallback((category: 'video'|'3d'|'ai') => {
@@ -84,6 +95,22 @@ export default function Home() {
 
   // Mute audio when contact overlay is open
   const effectiveAudioEnabled = audioEnabled && !isContactOpen;
+
+  // Auto-detect the focused plane for the INFO button
+  const focusedPlane = journeyState 
+    ? currentPlanes.filter(p => p.category === journeyState.category)[journeyState.step] 
+    : null;
+
+  // Minigame Timer (Show radar button after 60s of normal Explorer mode)
+  useEffect(() => {
+    // Only run timer if we are in explorer mode, no project focused, and minigame is either idle or was previously rejected
+    if (isStarted && !isGridMode && !journeyState && (minigameStatus === 'idle' || minigameStatus === 'rejected') && !radarButtonVisible) {
+      const timer = setTimeout(() => {
+        setRadarButtonVisible(true);
+      }, 60000); // 60 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [isStarted, isGridMode, journeyState, minigameStatus, radarButtonVisible]);
 
   return (
     <main className="relative w-full h-[100dvh] overflow-hidden bg-[#0a0a0a]">
@@ -128,26 +155,35 @@ export default function Home() {
               isGridMode={isGridMode}
               visibleLines={visibleLines}
               journeyState={journeyState}
+              isInfoOpen={isInfoOpen}
               onFocusClear={handleFocusClear}
               onPlaneClick={handlePlaneClick}
               onOpenInfo={handleOpenInfo}
               onPlanesLoaded={handlePlanesLoaded}
               onJourneyLineClick={handleJourneyLineClick}
               onCenterPoint={setIsPointingAtPlane}
+              minigameStatus={minigameStatus}
+              onDiscountUnlocked={() => setMinigameStatus('won')}
             />
           </Suspense>
         </Canvas>
       </div>
 
-      {/* 2D UI Overlay */}
       <HUD 
           isStarted={isStarted}
           audioEnabled={audioEnabled} 
           onToggleAudio={setAudioEnabled} 
-          activeProjectInfo={activeProjectInfo}
-          onCloseInfo={() => { setActiveProjectInfo(null); setJourneyState(null); }}
+          activeProjectInfo={activeProjectInfo || focusedPlane}
           isGridMode={isGridMode}
-          onToggleGridMode={() => setIsGridMode(!isGridMode)}
+          onToggleGridMode={() => {
+            const nextGridMode = !isGridMode;
+            setIsGridMode(nextGridMode);
+            if (nextGridMode) {
+              setVisibleLines([]); // Default to no tags selected to show everything
+            } else {
+              setVisibleLines([]); // Clean slate for Explorer mode
+            }
+          }}
           visibleLines={visibleLines}
           onToggleLine={toggleLine}
           journeyState={journeyState}
@@ -156,6 +192,26 @@ export default function Home() {
           maxStep={journeyState ? categoryCounts[journeyState.category] - 1 : 0}
           isPointingAtPlane={isPointingAtPlane}
           onOpenContact={() => setIsContactOpen(true)}
+          isInfoOpen={isInfoOpen}
+          onToggleInfo={() => setIsInfoOpen(!isInfoOpen)}
+          onCloseInfo={() => { 
+            setActiveProjectInfo(null); 
+            setIsInfoOpen(false);
+          }}
+          showRadarButton={radarButtonVisible}
+          onRadarClick={() => {
+              setRadarButtonVisible(false); // Hide the button
+              setMinigameStatus('invited'); // Show the popup
+          }}
+      />
+      
+      <Joystick isStarted={isStarted} isGridMode={isGridMode} isFocused={!!journeyState} />
+
+      <MinigameUI 
+          status={minigameStatus}
+          onAccept={() => setMinigameStatus('active')}
+          onReject={() => setMinigameStatus('rejected')} // End game flow, restarts the 60s timer
+          onCloseReward={() => setMinigameStatus('completed')} // Close cleanly, button disappears forever
       />
     </main>
   );

@@ -14,6 +14,7 @@ interface MediaPlaneProps {
     title: string;
     previewSrc?: string;
     fullSrc?: string;
+    posterSrc?: string;
     category: 'video' | '3d' | 'ai';
     isActiveJourney?: boolean;
     audioEnabled: boolean;
@@ -36,9 +37,9 @@ interface MediaPlaneProps {
 
 export const MediaPlane: React.FC<MediaPlaneProps> = (props) => {
     const { 
-        position, index, title, previewSrc, fullSrc, category, 
+        position, index, title, previewSrc, fullSrc, posterSrc: providedPosterSrc, category, 
         audioEnabled, globalVolume, audioZOffset = 0,
-        editorMode, isGridMode,
+        editorMode, isGridMode, audioDebug,
         isFocused, isAnyFocused, 
         targetPosition, listener, 
         onPositionChange, onClick, onPointerOver, onPointerOut 
@@ -47,6 +48,9 @@ export const MediaPlane: React.FC<MediaPlaneProps> = (props) => {
     const meshRef = useRef<THREE.Mesh>(null);
     const animatedGroupRef = useRef<THREE.Group>(null);
     const audioRef = useRef<THREE.PositionalAudio>(null);
+    const filterRef = useRef<BiquadFilterNode | null>(null);
+    const debugRingRef = useRef<THREE.Mesh>(null);
+    const muffleRingRef = useRef<THREE.Mesh>(null);
     const { size } = useThree();
 
     // Mobile detection: narrow screen pixels
@@ -56,22 +60,55 @@ export const MediaPlane: React.FC<MediaPlaneProps> = (props) => {
     const [videoQuality, setVideoQuality] = useState<'preview' | 'full'>('preview');
     const [isActive, setIsActive] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
+    
+    // Grid mode performance: defer loading until the user interacts IF returning from focus
+    const [hasBeenHovered, setHasBeenHovered] = useState(false);
+    const wasAnyFocusedRef = useRef(false);
 
-    // Mobile restriction: No video in Explorer/Grid, only in Focus
-    // Synchronize with the fade-to-black cycle for a cleaner transition
-    const activeSrc = useMemo(() => {
-        if (isMobile) {
-            // Only provide high-res source when we've actually swapped quality in Focus
-            return (isFocused && videoQuality === 'full') ? fullSrc : undefined;
+    // Track if any plane was recently focused
+    useEffect(() => {
+        if (isAnyFocused) {
+            wasAnyFocusedRef.current = true;
         }
-        return videoQuality === 'full' ? fullSrc : previewSrc;
-    }, [isMobile, isFocused, videoQuality, fullSrc, previewSrc]);
+    }, [isAnyFocused]);
+
+    // Reset hover memory when entering Grid Mode
+    useEffect(() => {
+        if (isGridMode && !isAnyFocused) {
+            // We entered Grid mode and nothing is currently focused.
+            // Did we just return from a focus state?
+            if (wasAnyFocusedRef.current) {
+                 // We returned from focus mode. Require hover for all planes to prevent stutter.
+                 setHasBeenHovered(false);
+                 // Reset the ref since we've handled the transition
+                 wasAnyFocusedRef.current = false;
+            } else {
+                 // We entered from Explorer or cold start (no recent focus). Auto-play them.
+                 setHasBeenHovered(true);
+            }
+        }
+    }, [isGridMode, isAnyFocused]);
+
+    const activeSrc = useMemo(() => {
+        // Both Mobile and Desktop use `-mobile.mp4` (720p w/ audio) for grid/explorer, and `fullSrc` for focus.
+        if (isFocused || videoQuality === 'full') return fullSrc;
+        return fullSrc ? fullSrc.replace('.mp4', '-mobile.mp4') : previewSrc;
+    }, [isFocused, videoQuality, fullSrc, previewSrc]);
 
     // 1. Logic Hooks 
     // Optimization: only 'active' if near or focused
-    const { texture, play, pause, setMuted } = useSpatialVideo(activeSrc, isActive || isFocused || !!editorMode, audioRef);
+    // Focus Isolation: If anyone is focused, ONLY the focused one is "active"
+    const isIsolated = isAnyFocused && !isFocused;
+    
+    // In grid mode, we wait for a hover before loading the video to prevent stutter.
+    const gridActive = isGridMode ? hasBeenHovered : true;
+    
+    // On mobile, bypass culling distance limits if actively focused
+    const effectiveActive = ((isActive || !!editorMode) && !isIsolated && gridActive) || (isMobile && isFocused);
+
+    const { texture, isAcquiring, play, pause, setMuted } = useSpatialVideo(activeSrc, !!(effectiveActive || isFocused), audioRef);
     const { syncState, update } = useMediaState({
-        position, targetPosition, isFocused, isGridMode, isAnyFocused, editorMode, videoQuality, setVideoQuality
+        position, targetPosition, isFocused: !!isFocused, isGridMode: !!isGridMode, isAnyFocused: !!isAnyFocused, editorMode: !!editorMode, videoQuality, setVideoQuality
     });
 
     useEffect(() => {
@@ -81,20 +118,31 @@ export const MediaPlane: React.FC<MediaPlaneProps> = (props) => {
     }, [audioEnabled, setMuted]);
 
     // 2. Poster / Fallback
-    const posterSrc = useMemo(() => previewSrc?.replace('.mp4', '.jpg') || '', [previewSrc]);
-    const posterTexture = useTexture(posterSrc);
+    const posterSrc = useMemo(() => providedPosterSrc || previewSrc?.replace('.mp4', '.jpg') || null, [providedPosterSrc, previewSrc]);
+    const posterTexture = useTexture(posterSrc || '/fallback.jpg'); // Fallback to a valid path or handle null
     if (posterTexture) posterTexture.colorSpace = THREE.SRGBColorSpace;
 
-    // 3. Setup Audio Graph
+    // 3. Setup Audio Graph & Filters
     useEffect(() => {
         const audio = audioRef.current;
         if (!audio) return;
 
-        audio.setDistanceModel('exponential');
-        audio.setRefDistance(5); // Increased for smoother fade
-        audio.setRolloffFactor(isGridMode ? 0 : 1); // Less aggressive falloff for more spatial depth
-        audio.setMaxDistance(100);
+        // Tighter culling to prevent chaotic overlap
+        audio.setDistanceModel('linear');
+        audio.setRefDistance(2); // Start dropping volume gracefully immediately after 2 units
+        audio.setMaxDistance(10); // Absolute silence past 10 units
+        audio.setRolloffFactor(1); 
         
+        // Set up the dynamic Muffle filter (LowPass)
+        if (!filterRef.current && listener.context && listener.context.state !== 'closed') {
+            const filter = listener.context.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 24000; // Start fully open (clear)
+            filter.Q.value = 0.5; // Gentle slope
+            filterRef.current = filter;
+            audio.setFilter(filter);
+        }
+
         // Disable spatial effects (panning) in Grid Mode
         if (isGridMode && audio.panner) {
             audio.panner.panningModel = 'equalpower';
@@ -120,13 +168,12 @@ export const MediaPlane: React.FC<MediaPlaneProps> = (props) => {
         if (isGridMode) {
             // Grid culling: check Y distance (vertical viewport)
             const relativeY = planePos.y - camY;
-            // 3.5 units window matches the fading window in use-media-state
-            near = Math.abs(relativeY) < 3.5;
+            near = Math.abs(relativeY) < 4.5; // Loosened slightly to prevent popping
         } else {
-            // Explorer culling: check Z distance (tightened for 6-video pool)
+            // Explorer culling: Tightened to ~5 items to match pool size (6)
             const relativeZ = planeZ - camZ; 
-            // -30 units allows for more pre-loading/smoothing (matching the 250 mounting window)
-            near = relativeZ < 1 && relativeZ > -30; 
+            // Cull strictly when passing the camera (relativeZ > 0.2) to free up the pool
+            near = relativeZ <= 0.2 && relativeZ > -25; 
         }
         
         if (near !== isActive) setIsActive(near);
@@ -135,10 +182,71 @@ export const MediaPlane: React.FC<MediaPlaneProps> = (props) => {
         if (meshRef.current.material) {
             const material = meshRef.current.material as THREE.MeshBasicMaterial;
             // Always show the poster as a fallback if the video texture isn't ready
-            const newMap = (texture && isActive) ? texture : posterTexture;
+            const newMap = (texture && effectiveActive) ? texture : posterTexture;
             if (material.map !== newMap) {
                 material.map = newMap;
                 material.needsUpdate = true;
+            }
+
+            // If acquiring, gently pulse the base color
+            if (isAcquiring) {
+                 const pulse = 0.5 + Math.sin(state.clock.elapsedTime * 5) * 0.2;
+                 material.color.setRGB(pulse, pulse, pulse);
+            }
+        }
+
+        // Dynamic Muffle Effect
+        if (filterRef.current && listener.context) {
+            // Project plane position to NDC (Viewport space)
+            const ndcPos = new THREE.Vector3().copy(planePos);
+            ndcPos.project(state.camera);
+            
+            // Check if center of video is roughly rendering on the screen
+            // Z > 1 means it's behind the camera. X/Y roughly [-1.2, 1.2] allows a bit of leeway at the edges
+            const inViewport = ndcPos.z < 1 && ndcPos.x >= -1.2 && ndcPos.x <= 1.2 && ndcPos.y >= -1.2 && ndcPos.y <= 1.2;
+            const dist3D = state.camera.position.distanceTo(planePos);
+
+            let targetFreq = 24000;
+
+            if (isFocused || isGridMode) {
+                targetFreq = 24000; // Never muffle in Focus or Grid mode
+            } else {
+                if (inViewport && dist3D < 5) { // Safe space tightened to 5 units
+                    targetFreq = 24000; // Safe space: clear audio
+                } else if (inViewport) {
+                    // Visible, but further than 5 units. Gradually drop to 300Hz by 12 units.
+                    const t = Math.max(0, Math.min(1, (dist3D - 5) / 7));
+                    targetFreq = THREE.MathUtils.lerp(24000, 300, t);
+                } else {
+                    // Not visible. It should be muffled, but STILL scale with spatial distance.
+                    // Start at a moderately muffled 2000Hz (when close) down to 300Hz (at max bounds)
+                    const t = Math.max(0, Math.min(1, dist3D / 12));
+                    targetFreq = THREE.MathUtils.lerp(2000, 300, t);
+                }
+            }
+
+            // Ramp frequency smoothly to prevent popping
+            const currentTime = listener.context.currentTime;
+            filterRef.current.frequency.setTargetAtTime(targetFreq, currentTime, 0.15);
+            
+            // Visualizer Updates (If debug rings exist)
+            if (audioDebug && debugRingRef.current && muffleRingRef.current) {
+                // Outer red ring shows Muffle intensity (large = clear 24000hz, small = muffled 300hz)
+                const muffleScale = THREE.MathUtils.mapLinear(targetFreq, 300, 24000, 0.2, 2.5);
+                muffleRingRef.current.scale.setScalar(muffleScale);
+                (muffleRingRef.current.material as THREE.MeshBasicMaterial).opacity = 0.5;
+
+                // Inner green ring shows Volume/Presence intensity
+                let baseVolScale = 0;
+                if (!isGridMode && !isFocused && !isIsolated) {
+                    // Linear falloff between refDistance(2) and maxDistance(10)
+                    baseVolScale = Math.max(0, Math.min(1, 1 - ((dist3D - 2) / 8)));
+                } else if (isFocused || (isGridMode && isHovered)) {
+                    baseVolScale = 1;
+                }
+                
+                debugRingRef.current.scale.setScalar(0.5 + baseVolScale * 1.5);
+                (debugRingRef.current.material as THREE.MeshBasicMaterial).opacity = baseVolScale * 0.8;
             }
         }
 
@@ -154,19 +262,24 @@ export const MediaPlane: React.FC<MediaPlaneProps> = (props) => {
             let targetVol = 0;
             if (isFocused) {
                 targetVol = 1.0;
+            } else if (isIsolated) {
+                // FORCE SILENCE for background items when focused (isolation mode)
+                targetVol = 0;
             } else if (isGridMode) {
-                // In grid mode, we want 100% volume for visible items, but triggered by hover
+                // In grid mode, we want 100% volume for visible items, but triggered by hover only
                 targetVol = (isActive && isHovered) ? 1.0 : 0;
-            } else if (!isAnyFocused && (camera.position.z > audioSourceZ || audioDistZ < 2)) {
+            } else {
                 // In Explorer, we keep the target volume high and let the spatial panner handle the falloff
                 targetVol = (isActive) ? 1.0 : 0;
             }
             
             audio.setVolume(targetVol * globalVolume);
 
-            if (near || isFocused) {
+            if (effectiveActive || isFocused) {
+                // iOS strictly blocks asynchronous `.play()` if the video is unmuted.
+                // On mobile, videos in Explorer mode MUST be muted to visually play without a click.
+                setMuted(isMobile && !isFocused ? true : !audioEnabled);
                 play();
-                setMuted(!audioEnabled); 
             } else {
                 pause();
             }
@@ -180,7 +293,10 @@ export const MediaPlane: React.FC<MediaPlaneProps> = (props) => {
                 onClick={onClick}
                 onPointerOver={(e) => {
                     setIsHovered(true);
-                    if (isGridMode) return;
+                    if (isGridMode) {
+                        setHasBeenHovered(true);
+                        return;
+                    }
                     onPointerOver?.(e);
                 }}
                 onPointerOut={(e) => {
@@ -197,15 +313,31 @@ export const MediaPlane: React.FC<MediaPlaneProps> = (props) => {
                     toneMapped={false}
                     side={THREE.DoubleSide}
                 />
+
                 <positionalAudio ref={audioRef} args={[listener]} />
             </mesh>
 
             <MediaTag 
                 category={category}
                 isGridMode={!!isGridMode}
+                isFocused={!!isFocused}
                 planeScale={syncState.scale}
                 parentOpacity={syncState.opacity}
             />
+
+            {/* Audio Debug Visualizers */}
+            {audioDebug && (
+                <group position={[0, 0, audioZOffset]}>
+                    <mesh ref={muffleRingRef} position={[0, 0, -0.1]}>
+                        <torusGeometry args={[3, 0.05, 16, 64]} />
+                        <meshBasicMaterial color="#ff3333" transparent opacity={0.5} depthTest={false} />
+                    </mesh>
+                    <mesh ref={debugRingRef} position={[0, 0, -0.05]}>
+                        <torusGeometry args={[2.8, 0.08, 16, 64]} />
+                        <meshBasicMaterial color="#33ff33" transparent opacity={0.8} depthTest={false} />
+                    </mesh>
+                </group>
+            )}
 
         </group>
     );

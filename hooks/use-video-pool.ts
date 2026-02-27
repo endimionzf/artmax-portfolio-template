@@ -10,6 +10,8 @@ class VideoPool {
     private pool: HTMLVideoElement[] = [];
     private activeMap = new Map<string, { video: HTMLVideoElement, count: number }>();
     private maxElements = 6; // Strict limit to ensure performance in all modes
+    private loadQueue: { src: string, resolve: (v: HTMLVideoElement | null) => void }[] = [];
+    private isProcessingQueue = false;
     
     // Stats for monitoring
     private stats = {
@@ -30,13 +32,40 @@ class VideoPool {
             v.crossOrigin = 'anonymous';
             v.loop = true;
             v.muted = true;
+            v.defaultMuted = true;
             v.playsInline = true;
-            v.style.display = 'none';
+            v.setAttribute('playsinline', '');
+            v.setAttribute('webkit-playsinline', '');
+            v.setAttribute('muted', '');
+            v.style.position = 'fixed';
+            v.style.top = '0';
+            v.style.left = '0';
+            v.style.width = '1px';
+            v.style.height = '1px';
+            v.style.opacity = '0.0001';
+            v.style.pointerEvents = 'none';
+            v.style.zIndex = '-9999';
             // Pre-warm the element
             v.load();
             this.pool.push(v);
+            
+            // iOS Safari is notoriously strict: if it's not in the DOM, it often refuses to autoplay or acquire hardware decoding
+            if (typeof document !== 'undefined') {
+                document.body.appendChild(v);
+            }
         }
         this.updateStats();
+    }
+
+    private normalize(src: string): string {
+        if (typeof window === 'undefined') return src;
+        try {
+            // Convert to absolute URL so that video.src (which is absolute)
+            // matches the key in our activeMap.
+            return new URL(src, window.location.href).href;
+        } catch {
+            return src;
+        }
     }
 
     private updateStats() {
@@ -58,10 +87,11 @@ class VideoPool {
     }
 
     public acquire(src: string): HTMLVideoElement | null {
+        const normalizedSrc = this.normalize(src);
         this.stats.totalAcquisitions++;
         
         // 1. Check if already active
-        const existing = this.activeMap.get(src);
+        const existing = this.activeMap.get(normalizedSrc);
         if (existing) {
             existing.count++;
             this.updateStats();
@@ -71,9 +101,12 @@ class VideoPool {
         // 2. Get from pool
         const video = this.pool.pop();
         if (video) {
-            video.src = src;
-            video.load();
-            this.activeMap.set(src, { video, count: 1 });
+            // Only set src and load if it's different to preserve buffer/state
+            if (video.src !== normalizedSrc) {
+                video.src = normalizedSrc;
+                video.load();
+            }
+            this.activeMap.set(normalizedSrc, { video, count: 1 });
             this.updateStats();
             return video;
         }
@@ -84,19 +117,67 @@ class VideoPool {
         return null;
     }
 
+    public async acquireAsync(src: string): Promise<HTMLVideoElement | null> {
+        return new Promise((resolve) => {
+            this.loadQueue.push({ src, resolve });
+            this.processQueue();
+        });
+    }
+
+    private async processQueue() {
+        if (this.isProcessingQueue || this.loadQueue.length === 0) return;
+        this.isProcessingQueue = true;
+
+        while (this.loadQueue.length > 0) {
+            const task = this.loadQueue.shift();
+            if (!task) continue;
+
+            const video = this.acquire(task.src);
+
+            if (video && video.readyState < 2) {
+                // Wait for the video to partially load before proceeding to the next one in the queue
+                await new Promise<void>((resolveLoad) => {
+                    const onLoaded = () => {
+                        video.removeEventListener('loadeddata', onLoaded);
+                        resolveLoad();
+                    };
+                    video.addEventListener('loadeddata', onLoaded);
+                    // Fallback timeout just in case it hangs
+                    setTimeout(() => {
+                        video.removeEventListener('loadeddata', onLoaded);
+                        resolveLoad();
+                    }, 500); 
+                });
+            } else if (!video) {
+                // If pool is empty, we just wait a tiny bit to avoid busy looping and resolve null
+                await new Promise(r => setTimeout(r, 50));
+            }
+
+            task.resolve(video);
+        }
+
+        this.isProcessingQueue = false;
+    }
+
     public release(src: string) {
-        const entry = this.activeMap.get(src);
+        // Also remove from queue if it hasn't started processing yet
+        this.loadQueue = this.loadQueue.filter(t => t.src !== src);
+
+        const normalizedSrc = this.normalize(src);
+        const entry = this.activeMap.get(normalizedSrc);
         if (!entry) return;
 
         entry.count--;
         if (entry.count <= 0) {
             const video = entry.video;
             video.pause();
-            video.removeAttribute('src');
-            video.load(); // Flush the buffer
+            // Restore "soft release": Don't clear src, just reset time
+            video.currentTime = 0; 
             this.pool.push(video);
-            this.activeMap.delete(src);
+            this.activeMap.delete(normalizedSrc);
             this.updateStats();
+            // Freeing a spot might mean we can process more from the queue
+            this.processQueue();
         }
     }
 

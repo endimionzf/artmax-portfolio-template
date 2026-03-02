@@ -1,36 +1,69 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Artmax Immersive Portfolio
 
-## Getting Started
+A high-performance, immersive 3D video portfolio built with **Next.js**, **Three.js (React Three Fiber)**, and **Postprocessing**.
 
-First, run the development server:
+## 🚀 Key Features
+
+- **Spatial Video Network**: An organic, 3D-distributed network of video planes with visibility culling and optimized raycasting.
+- **Cinematic Mobile Experience**: Dedicated `MobileVideoOverlay` with a muffled "underwater" audio effect using the Web Audio API (BiquadFilter).
+- **Production-Grade Streaming**: Custom video proxy at `/api/portfolio/video/` supporting HTTP range requests for seamless playback on Safari and iOS.
+- **Optimized Video Pipeline**: Automated scripts for thumbnail generation and iPhone-compliant video encoding (AAC-LC, Baseline 3.1).
+- **Adaptive HUD**: A reactive, auto-hiding interface for a clean, immersive viewing experience.
+
+## 🛠 Tech Stack
+
+- **Framework**: Next.js 15+
+- **3D Engine**: React Three Fiber (@react-three/fiber)
+- **Utilities**: Three-stdlib, Drei, Maath
+- **Styling**: Tailwind CSS 4
+- **Audio**: Web Audio API
+
+## 📦 Project Structure
+
+- `/components/SpatialMedia`: Core 3D media components (MediaPlane, etc.).
+- `/components/MobileVideoOverlay`: Specialized mobile playback UI.
+- `/app/api/portfolio`: Dynamic portfolio scanners and video streaming proxy.
+- `/scripts`: Python and Node.js utilities for media processing and optimization.
+
+## 🚦 Getting Started
+
+### Prerequisites
+
+- Node.js >= 20.9.0
+- FFmpeg (required for video optimization scripts)
+
+### Installation
+
+```bash
+npm install
+```
+
+### Development
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Video Optimization
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Before deploying, run the optimization suite:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+# General optimization
+npm run optimize
 
-## Learn More
+# iPhone/Safari compatibility fix
+node scripts/fix-mobile-videos.mjs
+```
 
-To learn more about Next.js, take a look at the following resources:
+### Deployment
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Build and bundle the application for production:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+# Full bundle
+npm run bundle:win
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# Fast bundle (no media)
+./bundle-no-media.ps1
+```

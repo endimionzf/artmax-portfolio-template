@@ -10,9 +10,9 @@ class VideoPool {
     private pool: HTMLVideoElement[] = [];
     private activeMap = new Map<string, { video: HTMLVideoElement, count: number }>();
     private maxElements = 6; // Strict limit to ensure performance in all modes
-    private loadQueue: { src: string, resolve: (v: HTMLVideoElement | null) => void }[] = [];
+    private loadQueue: { src: string, sources?: { src: string, type: string }[], resolve: (v: HTMLVideoElement | null) => void }[] = [];
     private isProcessingQueue = false;
-    
+
     // Stats for monitoring
     private stats = {
         active: 0,
@@ -48,7 +48,7 @@ class VideoPool {
             // Pre-warm the element
             v.load();
             this.pool.push(v);
-            
+
             // iOS Safari is notoriously strict: if it's not in the DOM, it often refuses to autoplay or acquire hardware decoding
             if (typeof document !== 'undefined') {
                 document.body.appendChild(v);
@@ -76,7 +76,7 @@ class VideoPool {
             src: src.split('/').pop() || src, // Just filename for clarity
             loadTime: (window as any).__videoLoadTimes?.[src]
         }));
-        
+
         this.listeners.forEach(l => l({ ...this.stats }));
     }
 
@@ -86,10 +86,10 @@ class VideoPool {
         return () => this.listeners.delete(listener);
     }
 
-    public acquire(src: string): HTMLVideoElement | null {
+    public acquire(src: string, sources?: { src: string, type: string }[]): HTMLVideoElement | null {
         const normalizedSrc = this.normalize(src);
         this.stats.totalAcquisitions++;
-        
+
         // 1. Check if already active
         const existing = this.activeMap.get(normalizedSrc);
         if (existing) {
@@ -102,8 +102,34 @@ class VideoPool {
         const video = this.pool.pop();
         if (video) {
             // Only set src and load if it's different to preserve buffer/state
-            if (video.src !== normalizedSrc) {
-                video.src = normalizedSrc;
+            // We use a custom data attribute to track the abstract ID since we could be using <source> tags
+            const currentCacheKey = video.getAttribute('data-cache-key') || video.src;
+            if (currentCacheKey !== normalizedSrc) {
+                video.setAttribute('data-cache-key', normalizedSrc);
+
+                // Clear any existing source children
+                while (video.firstChild) {
+                    video.removeChild(video.firstChild);
+                }
+
+                if (sources && sources.length > 0) {
+                    // iOS Safari Bug: Safari often ignores dynamically appended <source> elements 
+                    // on recycled <video> nodes. Evaluate the best codec in JS and assign .src directly!
+                    let selectedSrc = sources[0].src;
+                    for (const s of sources) {
+                        // canPlayType returns 'probably', 'maybe', or '' (empty string means unsupported)
+                        if (video.canPlayType(s.type) === 'probably') {
+                            selectedSrc = s.src;
+                            break;
+                        } else if (video.canPlayType(s.type) === 'maybe' && selectedSrc === sources[0].src) {
+                            selectedSrc = s.src;
+                        }
+                    }
+                    video.src = this.normalize(selectedSrc);
+                } else {
+                    video.src = normalizedSrc;
+                }
+
                 video.load();
             }
             this.activeMap.set(normalizedSrc, { video, count: 1 });
@@ -117,9 +143,9 @@ class VideoPool {
         return null;
     }
 
-    public async acquireAsync(src: string): Promise<HTMLVideoElement | null> {
+    public async acquireAsync(src: string, sources?: { src: string, type: string }[]): Promise<HTMLVideoElement | null> {
         return new Promise((resolve) => {
-            this.loadQueue.push({ src, resolve });
+            this.loadQueue.push({ src, sources, resolve });
             this.processQueue();
         });
     }
@@ -132,7 +158,7 @@ class VideoPool {
             const task = this.loadQueue.shift();
             if (!task) continue;
 
-            const video = this.acquire(task.src);
+            const video = this.acquire(task.src, task.sources);
 
             if (video && video.readyState < 2) {
                 // Wait for the video to partially load before proceeding to the next one in the queue
@@ -146,7 +172,7 @@ class VideoPool {
                     setTimeout(() => {
                         video.removeEventListener('loadeddata', onLoaded);
                         resolveLoad();
-                    }, 500); 
+                    }, 500);
                 });
             } else if (!video) {
                 // If pool is empty, we just wait a tiny bit to avoid busy looping and resolve null
@@ -171,8 +197,17 @@ class VideoPool {
         if (entry.count <= 0) {
             const video = entry.video;
             video.pause();
-            // Restore "soft release": Don't clear src, just reset time
-            video.currentTime = 0; 
+
+            // CRITICAL FIX: iOS Hardware Decoder Limit
+            // We MUST clear the physical src attributes and drop the nodes so Safari 
+            // releases its hardware decoders. If we leave 6 buffers open, Context Lost occurs.
+            video.removeAttribute('src');
+            video.removeAttribute('data-cache-key');
+            while (video.firstChild) {
+                video.removeChild(video.firstChild);
+            }
+            video.load(); // Flush the buffer immediately
+
             this.pool.push(video);
             this.activeMap.delete(normalizedSrc);
             this.updateStats();
@@ -183,7 +218,7 @@ class VideoPool {
 
     public prime() {
         this.pool.forEach(v => {
-            v.play().then(() => v.pause()).catch(() => {});
+            v.play().then(() => v.pause()).catch(() => { });
         });
     }
 

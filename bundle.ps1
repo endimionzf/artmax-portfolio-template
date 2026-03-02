@@ -31,6 +31,13 @@ Write-Host "Hoisting standalone files to $deployDir..."
 New-Item -ItemType Directory -Path $deployDir -Force | Out-Null
 Copy-Item -Path ".next/standalone/*" -Destination $deployDir -Recurse -Force
 
+# Remove node_modules from root of deployDir because CloudLinux NodeJS 
+# selector uses a symlink there and will crash if a real folder overwrites it.
+if (Test-Path "$deployDir/node_modules") {
+    Write-Host "Removing standalone node_modules to preserve CloudLinux symlink..."
+    Remove-Item -Path "$deployDir/node_modules" -Recurse -Force
+}
+
 # 4. Sync static assets for styling
 Write-Host "Syncing static assets..."
 if (Test-Path ".next/static") {

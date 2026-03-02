@@ -20,6 +20,7 @@ const sourceNodeCache = new WeakMap<HTMLVideoElement, MediaElementAudioSourceNod
  */
 export function useSpatialVideo(
     src: string | undefined, 
+    sources: {src: string, type: string}[],
     active: boolean, 
     positionalAudioRef: React.RefObject<THREE.PositionalAudio | null>
 ): SpatialVideoResult {
@@ -39,7 +40,9 @@ export function useSpatialVideo(
             
             if (videoRef.current) {
                 videoRef.current.pause();
-                videoPool.release(videoRef.current.src);
+                if (currentSrcRef.current) {
+                    videoPool.release(currentSrcRef.current);
+                }
                 videoRef.current = null;
                 sourceNodeRef.current = null; 
                 if (textureRef.current) {
@@ -55,24 +58,16 @@ export function useSpatialVideo(
         abortControllerRef.current = new AbortController();
         const signal = abortControllerRef.current.signal;
 
-        // Determine the best source version based on device
-        const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-        let resolvedSrc = src;
-        
-        if (src.endsWith('.mp4') && !src.includes('-preview') && !src.includes('-mobile') && !src.includes('-desktop')) {
-            const base = src.replace('.mp4', '');
-            resolvedSrc = isMobile ? `${base}-mobile.mp4` : `${base}-desktop.mp4`;
-        }
-
-        currentSrcRef.current = resolvedSrc;
+        // Rely on the cacheKey (which was passed as src) and explicitly provided sources
+        currentSrcRef.current = src;
         const startTime = performance.now();
         setIsAcquiring(true);
         
-        // Execute the async queue acquisition
-        videoPool.acquireAsync(resolvedSrc).then((video) => {
+        // Execute the async queue acquisition with explicit sources
+        videoPool.acquireAsync(src, sources).then((video) => {
             if (signal.aborted) {
                 // We got it but the component unmounted / changed active state. Throw it back!
-                if (video) videoPool.release(video.src);
+                if (video) videoPool.release(src);
                 return;
             }
 
@@ -105,8 +100,8 @@ export function useSpatialVideo(
         return () => {
             if (abortControllerRef.current) abortControllerRef.current.abort();
             
-            if (videoRef.current) {
-                videoPool.release(videoRef.current.src);
+            if (videoRef.current && src) {
+                videoPool.release(src);
                 videoRef.current = null;
                 if (textureRef.current) {
                     textureRef.current.dispose();
@@ -115,11 +110,11 @@ export function useSpatialVideo(
                 setIsAcquiring(false);
             } else if (isAcquiring) {
                  // Cancel the pending queue resolution via release
-                 videoPool.release(resolvedSrc);
+                 videoPool.release(src);
                  setIsAcquiring(false);
             }
         };
-    }, [src, active]);
+    }, [src, sources, active]);
 
     // 2. Audio Bridging
     useEffect(() => {

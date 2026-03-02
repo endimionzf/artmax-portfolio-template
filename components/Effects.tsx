@@ -22,7 +22,7 @@ export function Effects({ isFocused, focusTarget, isGridMode }: { isFocused: boo
     const vignetteOffset = 0.4;
     const vignetteDarknessRatio = 1.1;
     const eskil = false;
-    const noiseOpacity = 0.06;
+    const noiseOpacity = 0.03;
     const noisePremultiply = false;
 
     const targetVignetteDarkness = isFocused ? (0.8 * vignetteDarknessRatio) : (0.3 * vignetteDarknessRatio); 

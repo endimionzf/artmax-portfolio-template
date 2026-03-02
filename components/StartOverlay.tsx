@@ -3,13 +3,20 @@
 import { useState } from 'react';
 import { initAudioContext } from '@/hooks/use-spatial-audio';
 
+import { videoPool } from '@/hooks/use-video-pool';
+
 export function StartOverlay({ onStart }: { onStart: () => void }) {
   const [visible, setVisible] = useState(true);
 
   const handleStart = async () => {
-     await initAudioContext();
-     setVisible(false);
-     onStart();
+    await initAudioContext();
+    // CRITICAL iOS SAFARI FIX: 
+    // Safari permanently blocks video playback unless triggered directly by a user tap.
+    // This primes all 6 hidden <video> elements in the pool by triggering a silent .play() and .pause().
+    videoPool.prime();
+
+    setVisible(false);
+    onStart();
   };
 
   if (!visible) return null;
@@ -17,11 +24,11 @@ export function StartOverlay({ onStart }: { onStart: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0f0f0f] transition-opacity duration-1000">
       <h1 className="text-4xl md:text-6xl font-black text-white tracking-widest mb-12 uppercase">
-          Artmax Studio
+        Artmax Studio
       </h1>
-      <button 
-         onClick={handleStart}
-         className="px-8 py-3 border border-white text-white font-mono text-sm uppercase tracking-[0.2em] hover:bg-white hover:text-black transition-all mb-12"
+      <button
+        onClick={handleStart}
+        className="px-8 py-3 border border-white text-white font-mono text-sm uppercase tracking-[0.2em] hover:bg-white hover:text-black transition-all mb-12"
       >
         Enter Experience
       </button>
@@ -38,7 +45,7 @@ export function StartOverlay({ onStart }: { onStart: () => void }) {
           </span>
         </div>
         <p className="opacity-50">
-           Sound Required
+          Sound Required
         </p>
       </div>
     </div>

@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 
 interface MediaState {
-  activeVideoId: string | null;
-  setActiveVideoId: (id: string | null) => void;
+  activeVideoId: number | null;
+  setActiveVideoId: (id: number | null) => void;
 }
 
 export const useStore = create<MediaState>((set) => ({

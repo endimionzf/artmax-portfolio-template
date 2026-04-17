@@ -340,6 +340,9 @@ export function Experience({
         if (!useGenerator || planes.length === 0) return;
 
         setPlanes(prev => {
+            // ALWAYS sort by ID first so that `i` is deterministic for the pseudo-random generator
+            const sortedById = [...prev].sort((a, b) => a.id - b.id);
+
             const isPortrait = viewport.width < viewport.height;
             const aspect = viewport.width / viewport.height;
 
@@ -347,14 +350,14 @@ export function Experience({
             const effectiveSpreadY = isPortrait ? spreadXY * 1.4 : spreadXY * 0.8;
 
             const totalLayers = 5;
-            const planesCount = planes.length;
+            const planesCount = sortedById.length;
             const planesPerLayer = Math.ceil(planesCount / totalLayers);
 
             // Grid logic: we want roughly a square or landscape grid depending on spread
             const cols = Math.ceil(Math.sqrt(planesPerLayer * (effectiveSpreadX / effectiveSpreadY)));
             const rows = Math.ceil(planesPerLayer / cols);
 
-            const nextPlanes = planes.map((p, i) => {
+            const nextPlanes = sortedById.map((p, i) => {
                 const layerIndex = Math.floor(i / planesPerLayer);
                 const indexInLayer = i % planesPerLayer;
 

@@ -621,8 +621,6 @@ export function Experience({
                                     activeSpacerSpacing={spacerSpacing}
                                     audioDebug={audioDebug}
                                     editorMode={editorMode}
-                                    isFocused={isFocused}
-                                    isAnyFocused={activeVideoId !== null}
                                     isGridMode={displayedIsGridMode}
                                     listener={listener}
                                     isCulled={isFar && !isFocused && !editorMode}

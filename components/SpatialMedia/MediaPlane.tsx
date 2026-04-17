@@ -7,8 +7,10 @@ import * as THREE from 'three';
 import { useSpatialVideo } from '@/hooks/use-spatial-video';
 import { MediaTag } from './MediaTag';
 import { useMediaState } from '@/hooks/use-media-state';
+import { useStore } from '@/store/useStore';
 
 interface MediaPlaneProps {
+    id: number;
     position: [number, number, number];
     index: number;
     title: string;
@@ -25,8 +27,6 @@ interface MediaPlaneProps {
     audioDebug?: boolean;
     editorMode?: boolean;
     isGeneratorActive?: boolean;
-    isFocused?: boolean;
-    isAnyFocused?: boolean;
     isGridMode?: boolean;
     targetPosition?: [number, number, number];
     onPositionChange?: (newPos: [number, number, number]) => void;
@@ -38,17 +38,18 @@ interface MediaPlaneProps {
     audioZOffset?: number;
     isCulled?: boolean;
     activeSpacerSpacing?: number;
+    targetScale?: number;
 }
 
 export const MediaPlane: React.FC<MediaPlaneProps> = (props) => {
     const {
-        position, index, title, previewSrc, fullSrc, srcDesktop, srcDesktopFallback, srcMobile, posterSrc: providedPosterSrc, category,
+        id, position, index, title, previewSrc, fullSrc, srcDesktop, srcDesktopFallback, srcMobile, posterSrc: providedPosterSrc, category,
         audioEnabled, globalVolume, audioZOffset = 0,
         editorMode, isGridMode, audioDebug,
-        isFocused, isAnyFocused,
         targetPosition, listener,
         onPositionChange, onClick, onPointerOver, onPointerOut,
-        isCulled, activeSpacerSpacing = 15.0
+        isCulled, activeSpacerSpacing = 15.0,
+        targetScale = 1.0
     } = props;
 
     const meshRef = useRef<THREE.Mesh>(null);
@@ -70,8 +71,12 @@ export const MediaPlane: React.FC<MediaPlaneProps> = (props) => {
 
     // State for video quality swapping and activation
     const [videoQuality, setVideoQuality] = useState<'preview' | 'full'>('preview');
-    const [isActive, setIsActive] = useState(false);
+    const { activeVideoId } = useStore();
+    const isActive = activeVideoId === id;
+    const isFocused = isActive;
+    const isAnyFocused = activeVideoId !== null;
     const [isHovered, setIsHovered] = useState(false);
+    const [isActivated, setIsActivated] = useState(false);
 
     // Grid mode performance: defer loading until the user interacts IF returning from focus
     const [hasBeenHovered, setHasBeenHovered] = useState(false);
@@ -145,7 +150,7 @@ export const MediaPlane: React.FC<MediaPlaneProps> = (props) => {
 
     // On mobile, we NEVER want the WebGL plane to acquire a video channel if we are using the DOM overlay.
     // This prevents "Double Decoding" which crashes iPhone Safari.
-    const shouldAcquire = isMobile ? (!!editorMode) : (effectiveActive || isFocused);
+    const shouldAcquire = isMobile ? (!!editorMode) : ((effectiveActive && isActivated) || isFocused);
 
     // If culled (far away), skip video acquisition entirely to save GPU/Bandwidth
     const finalShouldAcquire = isCulled ? false : shouldAcquire;
@@ -213,7 +218,10 @@ export const MediaPlane: React.FC<MediaPlaneProps> = (props) => {
             filter.frequency.value = 24000; // Start fully open (clear)
             filter.Q.value = 0.5; // Gentle slope
             filterRef.current = filter;
-            audio.setFilter(filter);
+            // Defensive check: ensure audio object is still valid and connected
+            if (audio && typeof audio.setFilter === 'function') {
+                audio.setFilter(filter);
+            }
         }
 
         // Disable spatial effects (panning) in Grid Mode
@@ -239,18 +247,6 @@ export const MediaPlane: React.FC<MediaPlaneProps> = (props) => {
 
         const relativeY = planePos.y - camY;
         const relativeZ = planeZ - camZ;
-
-        let near = false;
-        if (isGridMode) {
-            // Grid culling: check Y distance (vertical viewport)
-            near = Math.abs(relativeY) < 4.5; // Loosened slightly to prevent popping
-        } else {
-            // Explorer culling: Tightened to ~5 items to match pool size (6)
-            // Cull strictly when passing the camera (relativeZ > 0.2) to free up the pool
-            near = relativeZ <= 0.2 && relativeZ > -25;
-        }
-
-        if (near !== isActive) setIsActive(near);
 
         // Map texture to material (needs to be done here for frame-sync)
         if (meshRef.current.material) {
@@ -396,7 +392,10 @@ export const MediaPlane: React.FC<MediaPlaneProps> = (props) => {
         <group ref={animatedGroupRef} position={targetPosition || position}>
             <mesh
                 ref={meshRef}
-                onClick={onClick}
+                onClick={(e) => {
+                    setIsActivated(true);
+                    onClick?.(e);
+                }}
                 onPointerOver={(e) => {
                     if (isCulled) return;
                     setIsHovered(true);

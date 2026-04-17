@@ -5,6 +5,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useState, useRef, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { useControls, button } from 'leva';
+import { useStore } from '@/store/useStore';
 
 // Components
 import { MediaPlane } from './SpatialMedia/MediaPlane';
@@ -125,7 +126,7 @@ export function Experience({
     const { camera, viewport } = useThree();
     const [listener] = useState(() => new THREE.AudioListener());
     const [planes, setPlanes] = useState<PlaneData[]>([]);
-    const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
+    const { activeVideoId, setActiveVideoId } = useStore();
     const [currentCamZ, setCurrentCamZ] = useState(20);
     const [currentCamY, setCurrentCamY] = useState(0);
     const [isGizmoDragging, setIsGizmoDragging] = useState(false);
@@ -346,14 +347,14 @@ export function Experience({
             const effectiveSpreadY = isPortrait ? spreadXY * 1.4 : spreadXY * 0.8;
 
             const totalLayers = 5;
-            const planesCount = planes.length || prev.length;
+            const planesCount = planes.length;
             const planesPerLayer = Math.ceil(planesCount / totalLayers);
 
             // Grid logic: we want roughly a square or landscape grid depending on spread
             const cols = Math.ceil(Math.sqrt(planesPerLayer * (effectiveSpreadX / effectiveSpreadY)));
             const rows = Math.ceil(planesPerLayer / cols);
 
-            return prev.map((p, i) => {
+            const nextPlanes = planes.map((p, i) => {
                 const layerIndex = Math.floor(i / planesPerLayer);
                 const indexInLayer = i % planesPerLayer;
 
@@ -383,10 +384,22 @@ export function Experience({
                         (ny + offsetY + (ry - 0.5) * 0.4) * effectiveSpreadY,
                         z + (rz - 0.5) * noiseZ
                     ]
-                };
+                } as PlaneData;
             });
+
+            // 1. Sort by Z-depth (Near-to-Far) to ensure consistent indexing with JourneyCurves
+            const sortedPlanes = [...nextPlanes].sort((a, b) => b.position[2] - a.position[2]);
+
+            return sortedPlanes;
         });
     }, [useGenerator, seed, spreadXY, clusterSize, spacerSize, clusterSpacing, spacerSpacing, noiseZ, planes.length, viewport.width, viewport.height]);
+
+    // Notify parent of the final sorted plane list in a separate effect to avoid render-loop / pure-function violations
+    useEffect(() => {
+        if (onPlanesLoaded && planes.length > 0) {
+            onPlanesLoaded(planes);
+        }
+    }, [planes, onPlanesLoaded]);
 
     // List of planes actually visible in the current mode
     const filteredPlanes = useMemo(() => {
@@ -404,12 +417,13 @@ export function Experience({
 
     const [gridPositionsMap, scrollYRange, gridMeta] = useMemo(() => {
         const isWidescreen = viewport.width > viewport.height;
-        const cols = isWidescreen ? 3 : 1;
+        const cols = isWidescreen ? 3 : 2;
         const rows = isWidescreen ? 2 : 3;
         const itemsPerPage = cols * rows;
 
-        const spacingX = 5.2;
-        const spacingY = -3.2;
+        const isMobilePortrait = !isWidescreen && viewport.width < 768;
+        const spacingX = isMobilePortrait ? 2.4 : 5.2; // Optimized for 0.45x scaling
+        const spacingY = isMobilePortrait ? -1.6 : -3.2;
 
         const numPages = Math.ceil(filteredPlanes.length / itemsPerPage);
         const positionMap = new Map<number, [number, number, number]>();
@@ -470,15 +484,14 @@ export function Experience({
         if (journeyState && planes.length > 0) {
             const catPlanes = planes.filter(p => p.category === journeyState.category);
             const target = catPlanes[Math.max(0, Math.min(journeyState.step, catPlanes.length - 1))];
-            if (target) {
-                const targetIndex = planes.findIndex(p => p.id === target.id);
-                if (focusedIndex !== targetIndex) setFocusedIndex(targetIndex);
+            if (target && activeVideoId !== target.id) {
+                setActiveVideoId(target.id);
             }
-        } else if (!journeyState && focusedIndex !== null) {
+        } else if (!journeyState && activeVideoId !== null) {
             // Clear local focus if journey is cleared externally
-            setFocusedIndex(null);
+            setActiveVideoId(null);
         }
-    }, [journeyState, planes, focusedIndex]);
+    }, [journeyState, planes, activeVideoId, setActiveVideoId]);
 
     // 5. Central Raycasting for HUD feedback
     const raycaster = useMemo(() => new THREE.Raycaster(), []);
@@ -518,7 +531,7 @@ export function Experience({
     return (
         <>
             {planes.length > 0 && (
-                <ScrollControls pages={isGridMode ? gridMeta.numPages * 2 : gridMeta.numPages} damping={0.2} enabled={!focusedIndex && !editorMode}>
+                <ScrollControls pages={isGridMode ? gridMeta.numPages * 2 : gridMeta.numPages} damping={0.2} enabled={!activeVideoId && !editorMode}>
                     {editorMode ? (
                         <OrthographicCamera
                             makeDefault
@@ -532,7 +545,7 @@ export function Experience({
                         <CameraRig
                             isStarted={isStarted}
                             editorMode={editorMode}
-                            focusTarget={focusedIndex !== null ? (displayedIsGridMode ? (gridPositionsMap.get(planes[focusedIndex].id) || null) : planes[focusedIndex].position) : null}
+                            focusTarget={activeVideoId !== null ? (displayedIsGridMode ? (gridPositionsMap.get(activeVideoId) || null) : planes.find(p => p.id === activeVideoId)?.position || null) : null}
                             isGridMode={displayedIsGridMode}
                             scrollYRange={scrollYRange}
                             totalPlanes={filteredPlanes.length}
@@ -547,12 +560,12 @@ export function Experience({
                         />
                     )}
 
-                    {focusedIndex !== null && !editorMode && (
+                    {activeVideoId !== null && !editorMode && (
                         <mesh
-                            position={[0, 0, (displayedIsGridMode ? (gridPositionsMap.get(planes[focusedIndex].id)?.[2] || 0) : planes[focusedIndex].position[2]) - 0.1]}
+                            position={[0, 0, (displayedIsGridMode ? (gridPositionsMap.get(activeVideoId)?.[2] || 0) : (planes.find(p => p.id === activeVideoId)?.position[2] || 0)) - 0.1]}
                             onClick={(e) => {
                                 e.stopPropagation();
-                                setFocusedIndex(null);
+                                setActiveVideoId(null);
                                 onFocusClear?.();
                             }}
                         >
@@ -587,12 +600,15 @@ export function Experience({
                             isFar = Math.abs(zPos - currentCamZ) > 50;
                         }
 
-                        const isFocused = focusedIndex === index;
+                        const isFocused = activeVideoId === plane.id;
 
                         // PERFORMANCE OPTIMIZATION:
                         // Instead of returning null and breaking onClick for distant planes,
                         // we always render the MediaPlane but pass it the isFar status.
                         // The MediaPlane will skip expensive texture loading if it's far.
+
+                        const isMobilePortrait = viewport.width < viewport.height && viewport.width < 768;
+                        const gridScale = (displayedIsGridMode && isMobilePortrait) ? 0.45 : 1.0;
 
                         return (
                             <Suspense key={plane.id} fallback={null}>
@@ -606,11 +622,12 @@ export function Experience({
                                     audioDebug={audioDebug}
                                     editorMode={editorMode}
                                     isFocused={isFocused}
-                                    isAnyFocused={focusedIndex !== null}
+                                    isAnyFocused={activeVideoId !== null}
                                     isGridMode={displayedIsGridMode}
                                     listener={listener}
                                     isCulled={isFar && !isFocused && !editorMode}
                                     targetPosition={displayedIsGridMode ? gridPos! : plane.position}
+                                    targetScale={gridScale}
                                     onPositionChange={(newPos) => setPlanes(prev => {
                                         const next = [...prev];
                                         next[index] = { ...next[index], position: newPos };
@@ -620,13 +637,16 @@ export function Experience({
                                     onClick={(e) => {
                                         if (dragStatus.current.hasMoved) return;
                                         e.stopPropagation();
-                                        if (focusedIndex === index) {
-                                            setFocusedIndex(null);
+                                        if (activeVideoId === plane.id) {
+                                            setActiveVideoId(null);
                                             onFocusClear?.();
                                         } else {
-                                            setFocusedIndex(index);
+                                            setActiveVideoId(plane.id);
+                                            // Use the plane index in the current sorted list
                                             const catPlanes = planes.filter(p => p.category === plane.category);
-                                            onPlaneClick?.(plane.category, catPlanes.findIndex(p => p.id === plane.id));
+                                            const indexInCategory = catPlanes.findIndex(p => p.id === plane.id);
+                                            console.log(`[Experience] Clicking Plane: ${plane.id}, Category: ${plane.category}, IndexInCategory: ${indexInCategory}`);
+                                            onPlaneClick?.(plane.category, indexInCategory);
                                         }
                                     }}
                                     onPointerOver={(e: any) => {
@@ -642,8 +662,8 @@ export function Experience({
                     <mesh
                         position={[0, 0, -500]}
                         onClick={() => {
-                            if (focusedIndex !== null) {
-                                setFocusedIndex(null);
+                            if (activeVideoId !== null) {
+                                setActiveVideoId(null);
                                 onFocusClear?.();
                             }
                         }}
@@ -652,7 +672,7 @@ export function Experience({
                         <meshBasicMaterial transparent opacity={0} depthTest={false} />
                     </mesh>
 
-                    {!editorMode && <Effects isFocused={focusedIndex !== null} focusTarget={focusedIndex !== null ? planes[focusedIndex].position : null} isGridMode={displayedIsGridMode} />}
+                    {!editorMode && <Effects isFocused={activeVideoId !== null} focusTarget={activeVideoId !== null ? planes.find(p => p.id === activeVideoId)?.position || null : null} isGridMode={displayedIsGridMode} />}
                     <DustParticles depth={650} />
 
                     <HiddenPlanet
@@ -662,7 +682,7 @@ export function Experience({
                         }}
                     />
 
-                    <FocusDarkener isFocused={focusedIndex !== null} isGridMode={displayedIsGridMode} />
+                    <FocusDarkener isFocused={activeVideoId !== null} isGridMode={displayedIsGridMode} />
                     <FadeOverlay opacity={fadeOpacity} />
                 </ScrollControls>
             )}

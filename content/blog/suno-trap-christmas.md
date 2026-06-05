@@ -1,7 +1,7 @@
 ---
 title: "Log 04: Jizăs LMA - AI Romanian Carols"
 date: "2024-12-25"
-thumbnail: "/blog/suno-christmas-trap.png"
+thumbnail: /blog/suno-trap-christmas/thumbnail.png
 category: "AI Production"
 excerpt: "Traditions are deep-rooted, but sometimes they need a new beat. A lighthearted experiment in mixing Romanian carols with the heavy pulse of trap."
 ---

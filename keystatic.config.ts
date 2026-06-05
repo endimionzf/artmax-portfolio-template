@@ -17,9 +17,10 @@ export default config({
           validation: { isRequired: true },
           defaultValue: { kind: 'today' },
         }),
-        thumbnail: fields.text({
-          label: 'Thumbnail Path',
-          description: 'Path relative to public folder (e.g. /blog/thumbnail.png)',
+        thumbnail: fields.image({
+          label: 'Thumbnail Image',
+          directory: 'public/blog',
+          publicPath: '/blog/',
           validation: { isRequired: true },
         }),
         category: fields.text({
@@ -50,7 +51,7 @@ export default config({
             codeBlock: true,
             image: {
               directory: 'public/blog',
-              publicPath: '/blog',
+              publicPath: '/blog/',
             },
           },
         }),

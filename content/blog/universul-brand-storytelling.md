@@ -1,7 +1,7 @@
 ---
 title: "Log 01: The Word that Opens the World"
 date: "2026-04-12"
-thumbnail: "/blog/universul-encyclopedia-larousse.jpg"
+thumbnail: /blog/universul-brand-storytelling/thumbnail.jpg
 category: "Captain's Log"
 excerpt: "In the immensity of a heavy book, we found a window. Why a childhood memory of an encyclopedia defines how we look at the world today."
 ---

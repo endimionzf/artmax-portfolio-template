@@ -1,7 +1,7 @@
 ---
 title: "Log 05: The Architecture of Memory"
 date: "2026-04-16"
-thumbnail: "/blog/roliminal-crt-memory.png"
+thumbnail: /blog/roliminal-memory-architecture/thumbnail.png
 category: "Audio Directing"
 excerpt: "Beyond the machine, there is the human heart. How we use directed audio to reconstruct the hyper-specific collective memories of a Romanian generation."
 ---

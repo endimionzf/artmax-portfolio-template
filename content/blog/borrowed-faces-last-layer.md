@@ -1,7 +1,7 @@
 ---
 title: "Log 03: The Performance of Stillness"
 date: "2026-04-14"
-thumbnail: "/blog/borrowed-faces-art-and-ai.jpg"
+thumbnail: /blog/borrowed-faces-last-layer/thumbnail.jpg
 category: "AI Production"
 excerpt: "In the fragility of archival paper, we found the eyes of history. How we used a focused digital approach to let the past speak for itself."
 ---

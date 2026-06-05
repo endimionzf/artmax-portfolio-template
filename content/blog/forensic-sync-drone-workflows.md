@@ -1,7 +1,7 @@
 ---
 title: "Log 02: Reconnecting the Moments"
 date: "2026-04-13"
-thumbnail: "/blog/resolve-drone-mediainfo-metadata.png"
+thumbnail: /blog/forensic-sync-drone-workflows/thumbnail.png
 category: "Workflow"
 excerpt: "A drone is a silent traveler, capturing light but leaving the sound behind. Here is how we patiently reconnect those fragments of time."
 ---

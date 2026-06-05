@@ -35,11 +35,22 @@ export async function getSortedPostsData() {
 
       // Use gray-matter to parse the post metadata section
       const matterResult = matter(fileContents);
+      const data = matterResult.data;
+
+      let dateString = '';
+      if (data.date) {
+        if (data.date instanceof Date) {
+          dateString = data.date.toISOString().split('T')[0];
+        } else {
+          dateString = String(data.date).trim();
+        }
+      }
 
       // Combine the data with the slug
       return {
         slug,
-        ...(matterResult.data as PostMetadata),
+        ...(data as PostMetadata),
+        date: dateString,
       };
     })
   );
@@ -85,11 +96,21 @@ export async function getPostData(slug: string): Promise<PostData> {
     if (problemMatch) seoDescription = problemMatch[1].trim();
   }
 
+  let dateString = '';
+  if (data.date) {
+    if (data.date instanceof Date) {
+      dateString = data.date.toISOString().split('T')[0];
+    } else {
+      dateString = String(data.date).trim();
+    }
+  }
+
   // Combine the data with the slug and contentHtml
   return {
     slug,
     contentHtml,
     ...(data as PostMetadata),
+    date: dateString,
     seoKeywords,
     seoDescription
   };

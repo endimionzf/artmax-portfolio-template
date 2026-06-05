@@ -106,6 +106,8 @@ export async function GET() {
                     const colProducer = getIdx('producer');
                     const colTags = getIdx('tags');
                     const colLink = getIdx('link');
+                    const colYouTube = getIdx('youtubeid');
+                    const colYear = getIdx('year');
 
                     if (colFile !== -1) {
                         for (let r = 1; r < rows.length; r++) {
@@ -122,6 +124,8 @@ export async function GET() {
                                 producer: colProducer !== -1 ? row[colProducer] : undefined,
                                 tags: colTags !== -1 ? row[colTags] : undefined,
                                 link: colLink !== -1 ? row[colLink] : undefined,
+                                youtubeId: colYouTube !== -1 ? row[colYouTube] : undefined,
+                                year: colYear !== -1 ? row[colYear] : undefined,
                             });
                         }
                     }
@@ -194,7 +198,9 @@ export async function GET() {
                                 director: '',
                                 producer: '',
                                 tags: '',
-                                link: ''
+                                link: '',
+                                youtubeId: '',
+                                year: ''
                             };
 
                             // Merge CSV Data if present
@@ -209,6 +215,16 @@ export async function GET() {
                                 if (csvData.producer) meta.producer = csvData.producer;
                                 if (csvData.tags) meta.tags = csvData.tags;
                                 if (csvData.link) meta.link = csvData.link;
+                                if (csvData.year) meta.year = csvData.year;
+                                
+                                // FORCE assign even if empty to ensure the property exists, 
+                                // but only overwrite if it's a valid string in CSV
+                                if (csvData.youtubeId !== undefined) {
+                                    meta.youtubeId = csvData.youtubeId.trim();
+                                    if (meta.youtubeId) {
+                                        console.log(`[Portfolio API] Linked YouTube for ${baseName}: ${meta.youtubeId}`);
+                                    }
+                                }
                             }
 
                             categoryResultsMap.set(baseName, meta);
@@ -264,7 +280,15 @@ export async function GET() {
             if (i < aiFiles.length) interleaved.push(aiFiles[i]);
         }
         const finalResults = interleaved.map((item, idx) => ({ ...item, id: idx + 1 }));
-        return NextResponse.json(finalResults);
+
+        return new NextResponse(JSON.stringify(finalResults), {
+            headers: {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0',
+            },
+        });
 
     } catch (globalError: any) {
         console.error("[Portfolio API] Global Failure:", globalError);

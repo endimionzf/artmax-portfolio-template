@@ -141,11 +141,17 @@ export function CameraRig({
                 dragStatus.current.hasMoved = true;
             }
 
-            const isMobile = window.innerWidth < 768;
-            const effectiveSensitivity = isMobile ? dragSensitivity * 2.5 : dragSensitivity;
+            const isMobile = window.innerWidth < 1024;
+            const effectiveSensitivity = isMobile ? dragSensitivity * 1.5 : dragSensitivity;
 
-            dragOffset.current.x -= dx * effectiveSensitivity;
-            dragOffset.current.y += dy * effectiveSensitivity;
+            if (isMobile && isGridMode && scroll.el) {
+                // Handled in touchmove for better preventDefault control
+                return;
+            } else {
+                // Explorer mode / Desktop: Standard XY Drag
+                dragOffset.current.x -= dx * effectiveSensitivity;
+                dragOffset.current.y += dy * effectiveSensitivity;
+            }
             lastPointer.current.set(e.clientX, e.clientY);
             didInteract.current = true;
         };
@@ -164,6 +170,9 @@ export function CameraRig({
                 );
                 lastPinchDist.current = dist;
                 didInteract.current = true;
+            } else if (e.touches.length === 1 && isGridMode) {
+                // Track start position for one-finger grid scroll
+                lastPointer.current.set(e.touches[0].clientX, e.touches[0].clientY);
             }
         };
 
@@ -176,8 +185,8 @@ export function CameraRig({
 
                 const delta = dist - lastPinchDist.current;
 
-                // Sensitivity: Reduced significantly for precise control
-                const pinchSensitivity = 4.0;
+                // Sensitivity: Increased for better responsiveness on modern high-res screens
+                const pinchSensitivity = 8.0;
 
                 // Only move if the pinch delta is significant to avoid jitter
                 if (Math.abs(delta) > 0.5) {
@@ -189,6 +198,20 @@ export function CameraRig({
                 didInteract.current = true;
 
                 // Prevent browser zoom while pinching the app
+                if (e.cancelable) e.preventDefault();
+            } else if (e.touches.length === 1 && isGridMode && scroll.el) {
+                // ONE-FINGER GRID SCROLL INTERCEPTOR
+                // Intercept raw touch moves to bypass R3F mesh-blocking
+                const touch = e.touches[0];
+                const dy = touch.clientY - lastPointer.current.y;
+
+                // Consistently tuned sensitivity for grid navigation
+                scroll.el.scrollTop -= dy * 1.0;
+
+                lastPointer.current.set(touch.clientX, touch.clientY);
+                didInteract.current = true;
+
+                // Prevent browser bounce if within the app
                 if (e.cancelable) e.preventDefault();
             }
         };
@@ -209,7 +232,7 @@ export function CameraRig({
             window.removeEventListener('touchstart', handleTouchStart);
             window.removeEventListener('touchmove', handleTouchMove);
         };
-    }, [editorMode, focusTarget, dragSensitivity, dragStatus, isStarted, isGizmoDragging]);
+    }, [editorMode, focusTarget, dragSensitivity, dragStatus, isStarted, isGizmoDragging, isGridMode]);
 
     // Custom Scroll Handling
     useEffect(() => {
@@ -224,9 +247,9 @@ export function CameraRig({
             e.preventDefault();
 
             if (isGridMode) {
-                el.scrollTop += e.deltaY * 5.0;
+                el.scrollTop += e.deltaY * 2.5;
             } else {
-                el.scrollTop -= e.deltaY;
+                el.scrollTop += e.deltaY * 0.8;
             }
             didInteract.current = true;
         };
@@ -303,7 +326,7 @@ export function CameraRig({
 
                 const requiredZForHeight = (planeHeightWithMargin / 2) / Math.tan(fovRadian / 2);
                 const requiredZForWidth = (planeWidthWithMargin / state.camera.aspect / 2) / Math.tan(fovRadian / 2);
-                optimalZOffset = Math.max(4.0, requiredZForHeight - 2.0, requiredZForWidth - 2.0);
+                optimalZOffset = Math.max(2.5, requiredZForHeight - 1.2, requiredZForWidth - 1.2);
             }
 
             const targetPos = new THREE.Vector3(tx, ty, tz + optimalZOffset);
@@ -321,18 +344,23 @@ export function CameraRig({
 
         } else if (isGridMode && scrollYRange) {
             const [topY, bottomY] = scrollYRange;
+            const isMobile = size.width < 768;
 
-            // Calculate discrete page based on scroll offset
-            // We know page gap is 15 from Experience.tsx
-            const pageGap = 15;
-            const numPages = Math.round(Math.abs(bottomY - topY) / pageGap) + 1;
-            const currentPage = Math.round(scroll.offset * (numPages - 1));
-            const targetPageY = topY - (currentPage * pageGap);
+            let targetY;
+            if (isMobile) {
+                // CONTINUOUS SCROLL FOR MOBILE
+                targetY = THREE.MathUtils.lerp(topY, bottomY, scroll.offset);
+            } else {
+                // PAGED SNAP FOR DESKTOP
+                const pageGap = 15;
+                const numPages = Math.round(Math.abs(bottomY - topY) / pageGap) + 1;
+                const currentPage = Math.round(scroll.offset * (numPages - 1));
+                targetY = topY - (currentPage * pageGap);
+            }
 
             state.camera.position.z = THREE.MathUtils.lerp(state.camera.position.z, 10, baseStep);
             state.camera.position.x = THREE.MathUtils.lerp(state.camera.position.x, 0, baseStep);
-            // Smoothly snap to the target page Y
-            state.camera.position.y = THREE.MathUtils.lerp(state.camera.position.y, targetPageY, baseStep);
+            state.camera.position.y = THREE.MathUtils.lerp(state.camera.position.y, targetY, 0.1);
 
             dragOffset.current.set(0, state.camera.position.y);
 
@@ -418,9 +446,9 @@ export function CameraRig({
             const deltaScroll = scroll.offset - lastScrollOffset.current;
             lastScrollOffset.current = scroll.offset;
 
-            // Use the ACTUAL last plane Z from props
-            const startZ = 45; // Increased from 20 to allow pulling back further
-            const endZ = lastPlaneZ - 15; // Extra buffer at the end
+            // 3-layer layout: Z range is ~0 to -24. Start just in front, stop at last layer.
+            const startZ = 25; // Close enough to see layer 0 clearly
+            const endZ = lastPlaneZ - 5; // Stop just past the 3rd layer
             const targetDistance = startZ - endZ;
 
             if (Math.abs(deltaScroll) > 0.0001) {

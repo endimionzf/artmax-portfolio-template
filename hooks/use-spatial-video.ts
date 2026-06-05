@@ -22,7 +22,7 @@ export function useSpatialVideo(
     src: string | undefined, 
     sources: {src: string, type: string}[],
     active: boolean, 
-    positionalAudioRef: React.RefObject<THREE.PositionalAudio | null>
+    audioRef: React.RefObject<THREE.Audio | null>
 ): SpatialVideoResult {
     const [texture, setTexture] = useState<THREE.VideoTexture | null>(null);
     const textureRef = useRef<THREE.VideoTexture | null>(null);
@@ -100,32 +100,44 @@ export function useSpatialVideo(
         return () => {
             if (abortControllerRef.current) abortControllerRef.current.abort();
             
+            // RELEASE but don't clear the texture state immediately.
+            // This prevents the 'flicker' back to poster/black while acquiring a new source (e.g. quality upgrade).
             if (videoRef.current && src) {
                 videoPool.release(src);
                 videoRef.current = null;
-                if (textureRef.current) {
-                    textureRef.current.dispose();
-                    textureRef.current = null;
-                }
+                // We keep textureRef.current and the texture state alive until the next acquisition succeeds.
                 setIsAcquiring(false);
             } else if (isAcquiring) {
-                 // Cancel the pending queue resolution via release
                  videoPool.release(src);
                  setIsAcquiring(false);
             }
         };
-    }, [src, sources, active]);
+    }, [src, JSON.stringify(sources), active]);
+
+    // Cleanup texture only on unmount
+    useEffect(() => {
+        return () => {
+            if (textureRef.current) {
+                textureRef.current.dispose();
+                textureRef.current = null;
+            }
+        };
+    }, []);
 
     // 2. Audio Bridging
     useEffect(() => {
-        const audio = positionalAudioRef.current;
+        const audio = audioRef.current;
         const video = videoRef.current;
         
         // Ensure everything is ready to bridge
         if (!audio || !video || !active) {
             // Cleanup previous connection if it exists
-            if (audio?.source) {
-                audio.disconnect();
+            // Use safe optional chaining and existence checks
+            const currentSource = audio ? (audio as any).source : null;
+            if (audio && currentSource) {
+                try {
+                    audio.disconnect();
+                } catch (e) {}
                 (audio as any).source = null;
             }
             return;
@@ -143,8 +155,10 @@ export function useSpatialVideo(
             }
 
             // Ensure previous source is disconnected
-            if (audio.source && audio.source !== sourceNode) {
-                audio.disconnect();
+            if (audio && audio.source && audio.source !== sourceNode) {
+                try {
+                    audio.disconnect();
+                } catch (e) {}
             }
             
             audio.setNodeSource(sourceNode as any);
@@ -158,7 +172,9 @@ export function useSpatialVideo(
                 try {
                     // Sever the connection between the persistent source node
                     // and the Three.js gain node. This prevents "Audio Bleed".
-                    sourceNode.disconnect();
+                    if (sourceNode && typeof sourceNode.disconnect === 'function') {
+                        sourceNode.disconnect();
+                    }
                     
                     // We DO NOT call audio.disconnect() here because in Three.js 
                     // that disconnects the gain node from the listener, silencing 
@@ -171,7 +187,7 @@ export function useSpatialVideo(
                 }
             }
         };
-    }, [texture, active, positionalAudioRef, src]);
+    }, [texture, active, audioRef, src]);
 
     // 3. Playback Controls (Promise-aware)
     const play = useCallback(async () => {

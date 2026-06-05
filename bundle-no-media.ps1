@@ -32,6 +32,17 @@ Write-Host "Hoisting standalone files to $deployDir..."
 New-Item -ItemType Directory -Path $deployDir -Force | Out-Null
 Copy-Item -Path ".next/standalone/*" -Destination $deployDir -Recurse -Force
 
+# IMPORTANT: Remove public/static from the hoisting result because 
+# they contain EVERYTHING. We will sync them manually with filters.
+if (Test-Path "$deployDir/public") {
+    Write-Host "Clearing bloated public folder from standalone hoisting..."
+    Remove-Item -Path "$deployDir/public" -Recurse -Force
+}
+if (Test-Path "$deployDir/.next/static") {
+    Write-Host "Clearing static folder from standalone hoisting..."
+    Remove-Item -Path "$deployDir/.next/static" -Recurse -Force
+}
+
 # Remove node_modules from root of deployDir because CloudLinux NodeJS 
 # selector uses a symlink there and will crash if a real folder overwrites it.
 if (Test-Path "$deployDir/node_modules") {
@@ -46,14 +57,26 @@ if (Test-Path ".next/static") {
     Copy-Item -Path ".next/static/*" -Destination "$deployDir/.next/static" -Recurse -Force
 }
 
+# 4.1 Sync Content folder (REQUIRED for blog metadata on server)
+Write-Host "Syncing content folder..." -ForegroundColor Cyan
+if (Test-Path "content") {
+    New-Item -ItemType Directory -Path "$deployDir/content" -Force | Out-Null
+    Copy-Item -Path "content\*" -Destination "$deployDir\content" -Recurse -Force
+}
+
 # 5. Sync Public folder (EXCLUDING .mp4 and .jpg)
 Write-Host "Syncing public assets (Excluding .mp4 and .jpg)..." -ForegroundColor Magenta
 if (Test-Path "public") {
-    New-Item -ItemType Directory -Path "$deployDir/public" -Force | Out-Null
-    Copy-Item -Path "public\*" -Destination "$deployDir\public" -Recurse -Force
-    # PowerShell Copy-Item -Exclude is notoriously buggy for subfolders. 
-    # It is much safer to copy everything and then cleanly remove the excluded formats.
-    Get-ChildItem -Path "$deployDir\public" -Include *.mp4, *.jpg -Recurse | Remove-Item -Force
+    # Use Robocopy for high-performance filtered copy to avoid "Disk Space" errors by not copying large media in the first place
+    Write-Host "Using Robocopy to efficiently filter media..."
+    # /XF = Exclude Files, /XD = Exclude Directories
+    robocopy "public" "$deployDir\public" /S /XF "*.mp4" "*.jpg" "*.JPG" "*.MP4" /XD ".git" | Out-Null
+
+    # Re-sync blog assets specifically as they require .jpg/.png
+    if (Test-Path "public\blog") {
+        Write-Host "Re-syncing blog media..."
+        robocopy "public\blog" "$deployDir\public\blog" /S | Out-Null
+    }
 }
 
 # 6. Create ZIP Archive (Ensuring .next is included and paths are relative)

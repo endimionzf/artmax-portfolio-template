@@ -10,8 +10,6 @@ class VideoPool {
     private pool: HTMLVideoElement[] = [];
     private activeMap = new Map<string, { video: HTMLVideoElement, count: number }>();
     private maxElements = 6; // Strict limit to ensure performance in all modes
-    private loadQueue: { src: string, sources?: { src: string, type: string }[], resolve: (v: HTMLVideoElement | null) => void }[] = [];
-    private isProcessingQueue = false;
 
     // Stats for monitoring
     private stats = {
@@ -143,52 +141,14 @@ class VideoPool {
         return null;
     }
 
+    /**
+     * Async acquisition wrapper to support future queuing logic
+     */
     public async acquireAsync(src: string, sources?: { src: string, type: string }[]): Promise<HTMLVideoElement | null> {
-        return new Promise((resolve) => {
-            this.loadQueue.push({ src, sources, resolve });
-            this.processQueue();
-        });
-    }
-
-    private async processQueue() {
-        if (this.isProcessingQueue || this.loadQueue.length === 0) return;
-        this.isProcessingQueue = true;
-
-        while (this.loadQueue.length > 0) {
-            const task = this.loadQueue.shift();
-            if (!task) continue;
-
-            const video = this.acquire(task.src, task.sources);
-
-            if (video && video.readyState < 2) {
-                // Wait for the video to partially load before proceeding to the next one in the queue
-                await new Promise<void>((resolveLoad) => {
-                    const onLoaded = () => {
-                        video.removeEventListener('loadeddata', onLoaded);
-                        resolveLoad();
-                    };
-                    video.addEventListener('loadeddata', onLoaded);
-                    // Fallback timeout just in case it hangs
-                    setTimeout(() => {
-                        video.removeEventListener('loadeddata', onLoaded);
-                        resolveLoad();
-                    }, 500);
-                });
-            } else if (!video) {
-                // If pool is empty, we just wait a tiny bit to avoid busy looping and resolve null
-                await new Promise(r => setTimeout(r, 50));
-            }
-
-            task.resolve(video);
-        }
-
-        this.isProcessingQueue = false;
+        return this.acquire(src, sources);
     }
 
     public release(src: string) {
-        // Also remove from queue if it hasn't started processing yet
-        this.loadQueue = this.loadQueue.filter(t => t.src !== src);
-
         const normalizedSrc = this.normalize(src);
         const entry = this.activeMap.get(normalizedSrc);
         if (!entry) return;
@@ -211,14 +171,20 @@ class VideoPool {
             this.pool.push(video);
             this.activeMap.delete(normalizedSrc);
             this.updateStats();
-            // Freeing a spot might mean we can process more from the queue
-            this.processQueue();
         }
     }
 
     public prime() {
         this.pool.forEach(v => {
-            v.play().then(() => v.pause()).catch(() => { });
+            // Unmuting briefly during a user gesture (like the 'Start' click)
+            // is often required to unlock future unmuted programmatic playback on iOS Safari.
+            v.muted = false;
+            v.play().then(() => {
+                v.pause();
+                v.muted = true;
+            }).catch(() => { 
+                v.muted = true;
+            });
         });
     }
 

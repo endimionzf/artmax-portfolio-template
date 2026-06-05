@@ -10,8 +10,10 @@ interface MobileVideoOverlayProps {
     onOpenInfo: () => void;
 }
 
+import { useIsMobile } from '@/hooks/use-is-mobile';
+
 export function MobileVideoOverlay({ activePlane, audioEnabled, isInfoOpen, onClose, onOpenInfo }: MobileVideoOverlayProps) {
-    const [isMobile, setIsMobile] = useState(false);
+    const isMobile = useIsMobile();
     const [errorCount, setErrorCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -28,22 +30,9 @@ export function MobileVideoOverlay({ activePlane, audioEnabled, isInfoOpen, onCl
     const isAudioConnected = useRef(false);
     const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Detect mobile device
-    useEffect(() => {
-        const checkMobile = () => {
-            const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-            const isSmall = window.innerWidth < 1024;
-            const isUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            setIsMobile(isUA || (isTouch && isSmall));
-        };
-        checkMobile();
-        window.addEventListener('resize', checkMobile);
-        return () => window.removeEventListener('resize', checkMobile);
-    }, []);
-
-    // Source Fallback Strategy
+    // Source Fallback Strategy - Stabilized by ID
     const sources = useMemo(() => {
-        if (!activePlane) return [];
+        if (!activePlane || !isMobile) return [];
         const mobile = activePlane.srcMobile;
         const desktop = activePlane.srcDesktop || activePlane.fullSrc;
         const preview = activePlane.previewSrc;
@@ -53,12 +42,21 @@ export function MobileVideoOverlay({ activePlane, audioEnabled, isInfoOpen, onCl
             preview,
             desktop
         ].filter((val, index, self) => val && self.indexOf(val) === index);
-    }, [activePlane]);
+    }, [activePlane?.id, isMobile]);
 
     const videoSrc = sources[errorCount] || null;
 
+    const lastPlaneIdRef = useRef<number | string | null>(null);
+
     // Reset state when plane changes
     useEffect(() => {
+        if (!isMobile) return;
+
+        // Skip reset if it's the same project (prevents resets when toggling info/audio)
+        const currentId = activePlane?.id;
+        if (currentId !== undefined && currentId === lastPlaneIdRef.current) return;
+        lastPlaneIdRef.current = currentId || null;
+
         setErrorCount(0);
         setIsLoading(true);
         setStatusText("Connecting...");
@@ -79,7 +77,7 @@ export function MobileVideoOverlay({ activePlane, audioEnabled, isInfoOpen, onCl
         if (filterRef.current) {
             filterRef.current.frequency.value = 20000;
         }
-    }, [activePlane, sources, audioEnabled]);
+    }, [activePlane?.id, audioEnabled, isMobile]);
 
     // Synchronize mute state with the video element
     useEffect(() => {
@@ -220,26 +218,48 @@ export function MobileVideoOverlay({ activePlane, audioEnabled, isInfoOpen, onCl
             const filter = filterRef.current;
             const now = ctx.currentTime;
 
-            // 400Hz for 'underwater' muffled effect, 20000Hz for clear audio
-            // Force 20000 if we just opened a new project (even if isInfoOpen is false)
-            const targetFreq = isInfoOpen ? 450 : 20000;
-
-            filter.frequency.cancelScheduledValues(now);
-            if (isInfoOpen) {
-                filter.frequency.exponentialRampToValueAtTime(targetFreq, now + 0.4);
-            } else {
-                filter.frequency.exponentialRampToValueAtTime(targetFreq, now + 0.3);
+            // Ensure context is running when we ramp
+            if (ctx.state === 'suspended' && !isInfoOpen) {
+                ctx.resume();
             }
-        }
-    }, [isInfoOpen, activePlane]);
 
-    // Separate Effects for Timer and Audio Lifecycle
+            // 450Hz for 'underwater' muffled effect, 20000Hz for clear audio
+            const targetFreq = isInfoOpen ? 450 : 20000;
+            const timeConstant = isInfoOpen ? 0.05 : 0.15; // Fast ramp for better responsiveness
+
+            filter.frequency.setTargetAtTime(targetFreq, now, timeConstant);
+        }
+    }, [isInfoOpen, activePlane?.id]);
+
+    // Visibility Change & Audio Lifecycle
     useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible' && audioContextRef.current?.state === 'suspended') {
+                audioContextRef.current.resume();
+            }
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
         showUI();
+        
         return () => {
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
             if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
         };
-    }, [activePlane, isLoading]);
+    }, [activePlane?.id, isLoading]);
+
+    // Video events for stability
+    useEffect(() => {
+        const v = videoRef.current;
+        if (!v) return;
+
+        const onWaiting = () => {}; // Could add loading spinner here if needed
+
+        v.addEventListener('waiting', onWaiting);
+        return () => {
+            v.removeEventListener('waiting', onWaiting);
+        };
+    }, [videoSrc]);
 
     // Audio Context Cleanup - ONLY on Full Unmount
     useEffect(() => {

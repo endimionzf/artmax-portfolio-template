@@ -9,6 +9,8 @@ export interface PlaneData {
     previewSrc?: string;
     fullSrc?: string;
     category: 'video' | '3d' | 'ai';
+    youtubeId?: string;
+    year?: string;
 }
 
 export interface JourneyCurves {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 
 export interface HUDProps {
   audioEnabled: boolean;
@@ -21,6 +22,7 @@ export interface HUDProps {
   onToggleInfo?: () => void;
   showRadarButton?: boolean;
   onRadarClick?: () => void;
+  onBack?: () => void;
 }
 
 export function HUD({
@@ -29,7 +31,8 @@ export function HUD({
   journeyState, onNextJourney, onPrevJourney, maxStep, isStarted,
   isPointingAtPlane = false, onOpenContact,
   isInfoOpen = false, onToggleInfo,
-  showRadarButton = false, onRadarClick
+  showRadarButton = false, onRadarClick,
+  onBack
 }: HUDProps) {
   // Keep a cached copy of the info so the text doesn't instantly vanish while fading out
   const [displayInfo, setDisplayInfo] = useState<any | null>(null);
@@ -101,20 +104,31 @@ export function HUD({
       <div className={`fixed inset-0 z-[100] pointer-events-none flex flex-col justify-between p-8 transition-opacity duration-700 ${isUserActive ? 'opacity-100' : 'opacity-0'}`}>
         {/* Top Bar (Logo + Audio Control) */}
         <div className="flex justify-between items-start w-full">
-          <button
-            onClick={onOpenContact}
-            className={`pointer-events-auto mix-blend-difference transition-all duration-1000 ${isStarted ? 'opacity-90 hover:opacity-50 hover:scale-105 active:scale-95' : 'opacity-20'}`}
-            title="Contact Artmax Studio"
-          >
-            <Image
-              src="/artmax_logo.png"
-              alt="Artmax Logo"
-              width={120}
-              height={40}
-              className="object-contain w-[80px] md:w-[120px] h-auto"
-              priority
-            />
-          </button>
+          <div className="flex flex-col gap-4 items-start pointer-events-auto">
+            <button
+              onClick={onOpenContact}
+              className={`mix-blend-difference transition-all duration-1000 ${isStarted ? 'opacity-90 hover:opacity-50 hover:scale-105 active:scale-95' : 'opacity-20'}`}
+              title="Contact Artmax Studio"
+            >
+              <Image
+                src="/artmax_logo.png"
+                alt="Artmax Logo"
+                width={120}
+                height={40}
+                className="object-contain w-[80px] md:w-[120px] h-auto"
+                priority
+              />
+            </button>
+
+            {isStarted && (
+              <Link 
+                href="/blog" 
+                className="text-[10px] font-mono tracking-[0.3em] uppercase text-white/40 hover:text-white transition-opacity duration-1000 mix-blend-difference"
+              >
+                // Journey_Log
+              </Link>
+            )}
+          </div>
         </div>
 
         {/* Left Middle Controls: Audio & View */}
@@ -172,7 +186,14 @@ export function HUD({
 
               {/* Navigation Triangles for Journey Slideshow */}
               {journeyState && (
-                <div className="fixed bottom-[15vh] md:bottom-24 left-1/2 -translate-x-1/2 flex gap-8 pointer-events-auto mix-blend-difference z-20">
+                <div className="fixed bottom-[15vh] md:bottom-10 left-1/2 -translate-x-1/2 flex gap-8 pointer-events-auto z-20 bg-black/20 backdrop-blur-md px-6 py-3 rounded-full border border-white/5 shadow-2xl transition-all duration-500">
+                  <button
+                    onClick={onBack}
+                    className="px-6 h-12 flex items-center justify-center rounded-full border bg-white/10 text-white border-white/30 hover:bg-white/20 transition-all font-bold tracking-[0.2em] text-xs uppercase"
+                  >
+                    BACK
+                  </button>
+
                   <button
                     onClick={onPrevJourney}
                     disabled={journeyState.step === 0}
@@ -239,7 +260,7 @@ export function HUD({
         onClick={onCloseInfo}
       >
         <div
-          className={`text-white w-full max-w-4xl px-8 lg:px-0 cursor-auto transition-all duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isInfoOpen ? 'translate-y-0 opacity-100 delay-200' : 'translate-y-8 opacity-0'} max-h-[90vh] overflow-y-auto no-scrollbar`}
+          className={`text-white w-full max-w-4xl px-8 lg:px-0 cursor-auto transition-all duration-[1200ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${isInfoOpen ? 'translate-y-0 opacity-100 delay-200' : 'translate-y-8 opacity-0'} max-h-[90vh] overflow-y-auto no-scrollbar pb-32`}
         >
           {/* Header */}
           <h2 className="text-4xl lg:text-6xl font-bold mb-6 tracking-tight">
@@ -316,6 +337,18 @@ export function HUD({
               </div>
             )}
           </div>
+        </div>
+
+        {/* Floating Back Button for Info Mode */}
+        <div 
+          className={`fixed bottom-12 left-1/2 -translate-x-1/2 z-[1001] transition-all duration-700 delay-500 ${isInfoOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none'}`}
+        >
+          <button
+            onClick={onCloseInfo}
+            className="px-10 h-14 flex items-center justify-center rounded-full border bg-white text-black border-white hover:bg-black hover:text-white transition-all font-bold tracking-[0.3em] text-xs uppercase shadow-[0_20px_40px_rgba(0,0,0,0.3)]"
+          >
+            BACK
+          </button>
         </div>
       </div>
     </>

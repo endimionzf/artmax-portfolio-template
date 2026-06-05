@@ -1,10 +1,11 @@
 'use client';
 
+import * as THREE from 'three';
 import { StartOverlay } from '@/components/StartOverlay';
 import { ContactOverlay } from '@/components/ContactOverlay';
 import { Canvas } from '@react-three/fiber';
 import { Experience } from '@/components/Experience';
-import { Suspense, useState, useEffect, useCallback } from 'react';
+import { Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 import { HUD } from '@/components/HUD';
 
 import { Leva } from 'leva';
@@ -12,10 +13,12 @@ import { resumeAudioContext } from '@/hooks/use-spatial-audio';
 import { ResourceMonitor } from '@/components/ResourceMonitor';
 import { videoPool } from '@/hooks/use-video-pool';
 import { MinigameUI } from '@/components/Minigame/MinigameUI';
-import { MobileVideoOverlay } from '@/components/MobileVideoOverlay';
+import { UniversalVideoOverlay } from '@/components/UniversalVideoOverlay';
+import { useIsMobile } from '@/hooks/use-is-mobile';
 
 
 export default function Home() {
+  const isMobile = useIsMobile();
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [activeProjectInfo, setActiveProjectInfo] = useState<any | null>(null);
   const [currentPlanes, setCurrentPlanes] = useState<any[]>([]);
@@ -74,6 +77,7 @@ export default function Home() {
   }, []);
 
   const handlePlaneClick = useCallback((category: 'video' | '3d' | 'ai', indexInCategory: number) => {
+    console.log(`[Page] handlePlaneClick - Category: ${category}, IndexInCategory: ${indexInCategory}`);
     setJourneyState({ category, step: indexInCategory });
   }, []);
 
@@ -98,9 +102,13 @@ export default function Home() {
   const effectiveAudioEnabled = audioEnabled && !isContactOpen;
 
   // Auto-detect the focused plane for the INFO button
-  const focusedPlane = journeyState
-    ? currentPlanes.filter(p => p.category === journeyState.category)[journeyState.step]
-    : null;
+  const focusedPlane = useMemo(() => {
+    if (!journeyState || currentPlanes.length === 0) return null;
+    const catPlanes = currentPlanes.filter(p => p.category === journeyState.category);
+    // Safety check: ensure step is within bounds
+    const safeStep = Math.min(Math.max(0, journeyState.step), catPlanes.length - 1);
+    return catPlanes[safeStep] || null;
+  }, [journeyState, currentPlanes]);
 
   // Minigame Timer (Show radar button after 15s)
   useEffect(() => {
@@ -117,12 +125,9 @@ export default function Home() {
     <main className="relative w-full h-[100dvh] overflow-hidden bg-[#0a0a0a]">
       {showDebug && <ResourceMonitor />}
       <Leva hidden={!showDebug} />
-      <StartOverlay onStart={() => {
-        import('@/hooks/use-spatial-audio').then(({ initAudioContext }) => {
-          initAudioContext();
-        });
-        videoPool.prime();
+      <StartOverlay onStart={(initialGrid) => {
         setAudioEnabled(true);
+        setIsGridMode(initialGrid);
         setIsStarted(true);
       }} />
 
@@ -139,7 +144,8 @@ export default function Home() {
         <Canvas
           shadows
           dpr={[1, 2]}
-          camera={{ position: [0, 0, 40], fov: 50, near: 0.1, far: 1000 }}
+          style={{ touchAction: 'none' }}
+          camera={{ position: [0, 0, 40], fov: 50, near: 0.01, far: 1000 }}
           gl={{
             antialias: true,
             alpha: true,
@@ -149,6 +155,7 @@ export default function Home() {
           }}
         >
           <color attach="background" args={['#0f0f0f']} />
+          <primitive object={new THREE.FogExp2('#0f0f0f', 0.03)} attach="fog" />
           <Suspense fallback={null}>
             <Experience
               isStarted={isStarted}
@@ -173,10 +180,14 @@ export default function Home() {
       <HUD
         isStarted={isStarted}
         audioEnabled={audioEnabled}
-        onToggleAudio={setAudioEnabled}
+        onToggleAudio={(enabled) => {
+          if (enabled) resumeAudioContext();
+          setAudioEnabled(enabled);
+        }}
         activeProjectInfo={activeProjectInfo || focusedPlane}
         isGridMode={isGridMode}
         onToggleGridMode={() => {
+          resumeAudioContext();
           const nextGridMode = !isGridMode;
           setIsGridMode(nextGridMode);
           if (nextGridMode) {
@@ -199,6 +210,7 @@ export default function Home() {
           setActiveProjectInfo(null);
           setIsInfoOpen(false);
         }}
+        onBack={handleFocusClear}
         showRadarButton={radarButtonVisible}
         onRadarClick={() => {
           setRadarButtonVisible(false); // Hide the button
@@ -208,7 +220,7 @@ export default function Home() {
 
 
 
-      <MobileVideoOverlay
+      <UniversalVideoOverlay
         activePlane={focusedPlane}
         audioEnabled={effectiveAudioEnabled}
         isInfoOpen={isInfoOpen}

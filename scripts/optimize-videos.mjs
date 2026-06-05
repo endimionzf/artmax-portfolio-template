@@ -141,7 +141,7 @@ async function processVideos() {
             const pattern = new RegExp(`^${basename},`, 'm');
             if (!pattern.test(csvContent)) {
                 const humanTitle = basename.replace(/[-_]/g, ' ');
-                const newRow = `\n${basename},"${humanTitle}","","","","","","","",""`;
+                const newRow = `\n${basename},"${humanTitle}","","","","","","","","",""`;
                 fs.appendFileSync(CSV_PATH, newRow);
                 csvContent += newRow;
                 console.log(`  [CSV APPEND] Added stub for: ${basename}`);

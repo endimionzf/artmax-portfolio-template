@@ -12,6 +12,7 @@
     "lint": "eslint",
     "sitemap": "node scripts/generate-sitemap.mjs",
     "bundle:win": "powershell -ExecutionPolicy Bypass -File bundle.ps1",
+    "bundle:nomedia": "powershell -ExecutionPolicy Bypass -File bundle-no-media.ps1",
     "thumbnails": "node scripts/generate-thumbnails.mjs",
     "optimize": "node scripts/optimize-videos.mjs"
   },

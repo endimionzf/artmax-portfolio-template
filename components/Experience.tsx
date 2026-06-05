@@ -48,7 +48,7 @@ function FadeOverlay({ opacity }: { opacity: number }) {
 function FocusDarkener({ isFocused, isGridMode }: { isFocused: boolean, isGridMode: boolean }) {
     const { camera } = useThree();
     const meshRef = useRef<THREE.Mesh>(null);
-    const targetOpacity = isFocused ? 0.85 : 0; // 85% darkness
+    const targetOpacity = 0; // Disabled: UniversalVideoOverlay handles the background now
 
     useFrame((_, delta) => {
         if (meshRef.current) {
@@ -123,7 +123,7 @@ export function Experience({
     minigameStatus = 'idle',
     onDiscountUnlocked
 }: ExperienceProps) {
-    const { camera, viewport } = useThree();
+    const { camera, viewport, size } = useThree();
     const [listener] = useState(() => new THREE.AudioListener());
     const [planes, setPlanes] = useState<PlaneData[]>([]);
     const { activeVideoId, setActiveVideoId } = useStore();
@@ -266,13 +266,13 @@ export function Experience({
 
     // 2. Fetch and Initialize Data
     useEffect(() => {
-        fetch('/api/portfolio')
+        fetch('/api/portfolio', { cache: 'no-store' })
             .then(res => res.json())
             .then(data => {
                 const sorted = [...data].sort((a, b) => a.id - b.id);
-                const spacingVal = 2.9;
-                const spreadVal = 20.3;
-                const seedVal = 1512;
+                const spacingVal = 6.5;
+                const spreadVal = 29.3;
+                const seedVal = 1519;
 
                 const planesWithPositions = sorted.map((item, i) => {
                     const rx = getPseudo(seedVal + i * 13.5);
@@ -287,7 +287,7 @@ export function Experience({
 
                     const x = (rx - 0.5) * effectiveSpreadX;
                     const y = (ry - 0.5) * effectiveSpreadY;
-                    const z = -(i * spacingVal);
+                    const z = -(i * spacingVal) + (rz - 0.5) * 1.5;
 
                     return {
                         ...item,
@@ -326,13 +326,13 @@ export function Experience({
 
     const { useGenerator, seed, spreadXY, clusterSize, spacerSize, clusterSpacing, spacerSpacing, noiseZ } = useControls('Generator', {
         useGenerator: { value: true },
-        seed: { value: 2024, min: 1, max: 3000, step: 1 },
-        spreadXY: { value: 20.0, min: 0, max: 100, step: 0.1, label: 'Spread XY' },
+        seed: { value: 1519, min: 1, max: 3000, step: 1 },
+        spreadXY: { value: 29.3, min: 0, max: 100, step: 0.1, label: 'Spread XY' },
         clusterSize: { value: 4, min: 1, max: 10, step: 1 },
         spacerSize: { value: 2, min: 0, max: 5, step: 1 },
         clusterSpacing: { value: 2.9, min: 1, max: 20, step: 0.1 },
-        spacerSpacing: { value: 15.0, min: 5, max: 50, step: 0.5, label: 'Layer Depth (Z)' },
-        noiseZ: { value: 4.0, min: 0, max: 10, step: 0.1 }
+        spacerSpacing: { value: 6.5, min: 5, max: 50, step: 0.5, label: 'Layer Depth (Z)' },
+        noiseZ: { value: 1.5, min: 0, max: 10, step: 0.1 }
     });
 
     // 4. Position & Layout Logic (Mobile-Aware)
@@ -406,27 +406,46 @@ export function Experience({
 
     // List of planes actually visible in the current mode
     const filteredPlanes = useMemo(() => {
-        if (!displayedIsGridMode) return planes;
-        // If no filter is selected, show everything. Otherwise, only show selected categories.
-        if (displayedVisibleLines.length === 0) return planes;
-
-        return planes.filter(p => {
+        // Filter first
+        const filtered = planes.filter(p => {
+            if (displayedVisibleLines.length === 0) return true;
             if (p.category === 'video' && displayedVisibleLines.includes('video')) return true;
             if (p.category === '3d' && displayedVisibleLines.includes('3d')) return true;
             if (p.category === 'ai' && displayedVisibleLines.includes('ai')) return true;
             return false;
         });
+
+        // If in Grid mode, sort by year (Newest First)
+        if (displayedIsGridMode) {
+            return [...filtered].sort((a, b) => {
+                const yearA = parseInt(a.year || '') || 0;
+                const yearB = parseInt(b.year || '') || 0;
+                
+                // Primary: Year Descending
+                if (yearA !== yearB) return yearB - yearA;
+                
+                // Secondary: ID Ascending (Original order)
+                return a.id - b.id;
+            });
+        }
+
+        return filtered;
     }, [planes, displayedIsGridMode, displayedVisibleLines]);
 
     const [gridPositionsMap, scrollYRange, gridMeta] = useMemo(() => {
         const isWidescreen = viewport.width > viewport.height;
-        const cols = isWidescreen ? 3 : 2;
-        const rows = isWidescreen ? 2 : 3;
-        const itemsPerPage = cols * rows;
+        const isMobilePortrait = size.width < 768; 
+        
+        // DESKTOP: 3x2 (6 items), TABLET: 2x3 (6 items), MOBILE: Continuous Vertical List
+        const cols = isWidescreen ? 3 : (isMobilePortrait ? 1 : 2);
+        const rows = isWidescreen ? 2 : (isMobilePortrait ? filteredPlanes.length : 3);
+        const itemsPerPage = isMobilePortrait ? filteredPlanes.length : (cols * rows);
 
-        const isMobilePortrait = !isWidescreen && viewport.width < 768;
-        const spacingX = isMobilePortrait ? 2.4 : 5.2; // Optimized for 0.45x scaling
-        const spacingY = isMobilePortrait ? -1.6 : -3.2;
+        const spacingX = isMobilePortrait ? 0 : 5.2; 
+        const spacingY = isMobilePortrait ? -4.5 : -3.2; 
+
+        // VERTICAL PAGE JUMPS: Only relevant for Desktop/Tablet pages
+        const pageVerticalGap = isMobilePortrait ? 0 : 15; 
 
         const numPages = Math.ceil(filteredPlanes.length / itemsPerPage);
         const positionMap = new Map<number, [number, number, number]>();
@@ -438,12 +457,8 @@ export function Experience({
             const col = indexInPage % cols;
             const row = Math.floor(indexInPage / cols);
 
-            // Center each page vertically
-            const pageOffsetY = (rows - 1) * spacingY / 2;
+            const pageOffsetY = isMobilePortrait ? 0 : (rows - 1) * spacingY / 2;
             const pageOffsetX = (cols - 1) * spacingX / 2;
-
-            // Each page is separated by a large vertical gap (e.g., 20 units)
-            const pageVerticalGap = 15;
 
             positionMap.set(plane.id, [
                 col * spacingX - pageOffsetX,
@@ -452,11 +467,12 @@ export function Experience({
             ]);
         });
 
-        // The scroll range covers all pages
-        const lastPageY = -((numPages - 1) * 15);
+        // The scroll range covers the total height of the stack
+        const totalStackHeight = (rows - 1) * Math.abs(spacingY);
+        const lastPageY = isMobilePortrait ? -totalStackHeight : -((numPages - 1) * pageVerticalGap);
 
-        return [positionMap, [0, lastPageY], { itemsPerPage, numPages, pageGap: 15 }] as const;
-    }, [filteredPlanes, viewport.width, viewport.height]);
+        return [positionMap, [0, lastPageY], { itemsPerPage, numPages, pageGap: pageVerticalGap }] as const;
+    }, [filteredPlanes, viewport.width, viewport.height, size.width]);
 
     // Calculate lateral bounds for camera wandering
     const cameraBounds = useMemo(() => {
@@ -534,7 +550,7 @@ export function Experience({
     return (
         <>
             {planes.length > 0 && (
-                <ScrollControls pages={isGridMode ? gridMeta.numPages * 2 : gridMeta.numPages} damping={0.2} enabled={!activeVideoId && !editorMode}>
+                <ScrollControls pages={isGridMode ? gridMeta.numPages * 0.9 : gridMeta.numPages * 0.9} damping={0.2} enabled={!activeVideoId && !editorMode}>
                     {editorMode ? (
                         <OrthographicCamera
                             makeDefault

@@ -54,3 +54,11 @@ next-env.d.ts
 *.ogg
 /public/portfolio/**/*.mp4
 /public/portfolio/**/*.webm
+
+# AI agent / GSD planning files
+.planning/
+.agent/
+.claude/
+*.csv
+hostico-deploy-no-media/
+scratch/

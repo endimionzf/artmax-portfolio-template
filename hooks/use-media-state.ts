@@ -11,6 +11,7 @@ interface MediaStateProps {
     editorMode?: boolean;
     videoQuality: 'preview' | 'full';
     setVideoQuality: (q: 'preview' | 'full') => void;
+    targetScale?: number;
 }
 
 export function useMediaState({
@@ -21,7 +22,8 @@ export function useMediaState({
     isAnyFocused,
     editorMode,
     videoQuality,
-    setVideoQuality
+    setVideoQuality,
+    targetScale: propTargetScale = 1.0
 }: MediaStateProps) {
     const stateRef = useRef({
         opacity: 0,
@@ -49,14 +51,16 @@ export function useMediaState({
             targetOpacity = 1;
         } else if (isFocused || isGridMode) {
             targetOpacity = 1;
-            targetScale = (isFocused && !isGridMode) ? 1.25 : 1;
+            const baseScale = isFocused ? 1.0 : (isGridMode ? propTargetScale : 1.0);
+            const focusScale = (isFocused && !isGridMode) ? 1.25 : 1.0;
+            targetScale = baseScale * focusScale;
 
             if (isGridMode && !isFocused) {
                 // Smooth Grid visibility
                 const camY = state.camera.position.y;
                 const planeY = group.position.y;
                 const distY = Math.abs(planeY - camY);
-                
+
                 // Start fading at 20, fully gone by 50 (wide enough for the 50-unit culling)
                 const gridFade = 1.0 - THREE.MathUtils.smoothstep(distY, 20, 50);
                 targetOpacity = gridFade;
@@ -64,9 +68,9 @@ export function useMediaState({
         } else {
             // When something is focused, keep others visible but dimmed (e.g. 0.4)
             const baseVisibility = isAnyFocused ? 0.4 : 1;
-            
+
             // More permissive fading: visible from far away, fades out matching culling dist
-            let proximityFading = (planeDistZ > 8) 
+            let proximityFading = (planeDistZ > 8)
                 ? (1 - THREE.MathUtils.smoothstep(planeDistZ, 200, 250)) // Fade out matching 250-unit mounting culling
                 : THREE.MathUtils.smoothstep(planeDistZ, 0, 5); // Fade out when camera passes through
             targetOpacity = baseVisibility * proximityFading;
@@ -98,11 +102,14 @@ export function useMediaState({
         if (material) {
             const b = 1.0 - Math.min(1, s.fadeToBlack);
             material.color.setRGB(b, b, b);
-            
-            // Smarter opacity: directly update material for performance
-            // but also sync to React state for child components
-            material.opacity = THREE.MathUtils.lerp(material.opacity, targetOpacity, delta * 8);
-            material.transparent = true;
+
+            // Only drive opacity in Grid and Focus modes.
+            // In Explorer mode, the atmospheric depth-fade system in MediaPlane.useFrame owns opacity.
+            if (editorMode || isFocused || isGridMode) {
+                material.opacity = THREE.MathUtils.lerp(material.opacity, targetOpacity, delta * 8);
+                material.transparent = true;
+            }
+            // Explorer mode: opacity is NOT touched here — MediaPlane useFrame controls it.
         }
 
         mesh.scale.lerp(new THREE.Vector3(targetScale, targetScale, 1), delta * 5);

@@ -49,3 +49,42 @@ a {
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
 }
+
+/* Journey Log Content Styles (Manual Prose) */
+.journey-log-content {
+  @apply font-light text-[#ccc] leading-relaxed;
+}
+
+.journey-log-content h1, 
+.journey-log-content h2, 
+.journey-log-content h3 {
+  @apply font-normal text-white tracking-tighter mt-12 mb-6 leading-tight;
+}
+
+.journey-log-content h2 { @apply text-2xl; }
+.journey-log-content h3 { @apply text-xl; }
+
+.journey-log-content p {
+  @apply mb-8 text-[#aaa];
+}
+
+.journey-log-content a {
+  @apply text-[#00f3ff] underline underline-offset-4 decoration-[#00f3ff]/20 hover:decoration-[#00f3ff] transition-colors;
+}
+
+.journey-log-content strong {
+  @apply font-medium text-white;
+}
+
+.journey-log-content img {
+  @apply rounded-sm border border-white/10 my-12 w-full h-auto;
+}
+
+.journey-log-content ul, 
+.journey-log-content ol {
+  @apply mb-8 ml-6;
+}
+
+.journey-log-content li {
+  @apply mb-2 list-disc marker:text-[#ff003c];
+}

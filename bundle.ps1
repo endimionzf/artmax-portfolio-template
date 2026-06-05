@@ -45,6 +45,13 @@ if (Test-Path ".next/static") {
     Copy-Item -Path ".next/static/*" -Destination "$deployDir/.next/static" -Recurse -Force
 }
 
+# 4.1 Sync Content folder (REQUIRED for blog metadata on server)
+Write-Host "Syncing content folder..." -ForegroundColor Cyan
+if (Test-Path "content") {
+    New-Item -ItemType Directory -Path "$deployDir/content" -Force | Out-Null
+    Copy-Item -Path "content\*" -Destination "$deployDir\content" -Recurse -Force
+}
+
 # 5. Sync Public folder (Including all media as requested)
 Write-Host "Syncing public assets (including media)..." -ForegroundColor Magenta
 if (Test-Path "public") {

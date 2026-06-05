@@ -4,6 +4,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import BlogSchema from '@/components/SEO/BlogSchema';
 
+export const dynamic = 'force-dynamic';
+
 export async function generateStaticParams() {
   const posts = await getPosts();
   return posts.map((post) => ({

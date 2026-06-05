@@ -1,0 +1,47 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-05T16:07:00Z",
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "name": "Resolve cPanel Standalone server infinite loading by patching port socket path support in server.js",
+      "status": "done"
+    },
+    {
+      "name": "Add Basic Auth security wrapper (middleware.ts) for /keystatic and /api/keystatic routes",
+      "status": "done"
+    },
+    {
+      "name": "Resolve EISDIR 500 error when saving/deleting posts by filtering directories in api/keystatic/update",
+      "status": "done"
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "name": "Resolve flat blog content image loading conflict with /blog/[slug] by migrating publicPath to /blog-images/",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [],
+  "human_actions_pending": [],
+  "decisions": [
+    {
+      "decision": "Use Proxy-based req.url modification and request cloning in API route to avoid request body stream errors.",
+      "rationale": "Cloning the request using standard new Request(url, req) for POST requests causes body stream ingestion failures in Next.js production builds."
+    },
+    {
+      "decision": "Intercept and strip directory deletions from the update API payload.",
+      "rationale": "Keystatic attempts to flat-delete directories as files during updates, throwing an EISDIR exception in Node.js fs.rm."
+    }
+  ],
+  "uncommitted_files": [
+    "app/api/keystatic/[...params]/route.ts",
+    "app/keystatic/[[...params]]/page.tsx",
+    "middleware.ts",
+    ".env.example",
+    "bundle-no-media.ps1",
+    "bundle.ps1"
+  ],
+  "next_action": "Explain the image path resolution strategy (changing Markdoc assets path from /blog/ to /blog-images/), perform the directory rename, run the migration script on the 7 posts, and compile the final bundle.",
+  "context_notes": "All core deployment, server compatibility, and admin authentication tasks are finished. The only remaining item is fixing flat markdown image paths that Next.js dynamic routing blocks."
+}

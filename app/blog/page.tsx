@@ -2,8 +2,6 @@ import { getPosts } from '@/utils/blog';
 import Link from 'next/link';
 import Image from 'next/image';
 
-export const dynamic = 'force-dynamic';
-
 export const metadata = {
   title: 'Journey Log | Artmax Studio',
   description: 'Chronicles of immersive exploration and digital craftsmanship.',

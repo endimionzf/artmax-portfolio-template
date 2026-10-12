@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
-  output: 'standalone',
+  output: 'export',
   trailingSlash: true,
   // basePath removed - user visits domain root artmaxstudio.ro which maps to artmax-app folder
   experimental: {

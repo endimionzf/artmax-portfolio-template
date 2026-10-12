@@ -266,7 +266,7 @@ export function Experience({
 
     // 2. Fetch and Initialize Data
     useEffect(() => {
-        fetch('/api/portfolio', { cache: 'no-store' })
+        fetch('/portfolio.json')
             .then(res => res.json())
             .then(data => {
                 const sorted = [...data].sort((a, b) => a.id - b.id);

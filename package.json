@@ -7,7 +7,10 @@
   },
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "node scripts/generate-sitemap.mjs && next build --webpack",
+    "predev": "node scripts/generate-portfolio-json.mjs",
+    "prebuild": "node scripts/generate-portfolio-json.mjs && node scripts/generate-sitemap.mjs",
+    "build": "next build --webpack",
+    "generate:portfolio": "node scripts/generate-portfolio-json.mjs",
     "start": "next start",
     "lint": "eslint",
     "sitemap": "node scripts/generate-sitemap.mjs",

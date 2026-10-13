@@ -5,26 +5,31 @@
 .DESCRIPTION
   Builds and compresses the static export into deploy-static.zip or deploy-static-nomedia.zip
   ready for deployment to Hostico / cPanel public_html or any static web host.
+  Supports -BasePath (e.g. -BasePath /template) for subfolder deployments and GitHub Pages.
 
 .PARAMETER NoMedia
-  Excludes heavy portfolio video files (.mp4/.webm) to create a lightweight deployment archive (~5MB).
+  Excludes heavy portfolio video files (.mp4/.webm) to create a lightweight deployment archive (~34MB).
 
 .PARAMETER Build
   Forces a fresh static build (npm run build) before packaging.
 
-.EXAMPLE
-  .\export.ps1
-  Packages full static site including media into deploy-static.zip
+.PARAMETER BasePath
+  Subdirectory or repo path prefix (e.g. /template, /my-repo) if not deploying to domain root.
 
 .EXAMPLE
-  .\export.ps1 -NoMedia
-  Packages lightweight static site into deploy-static-nomedia.zip
+  .\export.ps1
+  Packages full static site for domain root into deploy-static.zip
+
+.EXAMPLE
+  .\export.ps1 -NoMedia -BasePath /template
+  Packages lightweight static site for https://domain.com/template/
 #>
 
 [CmdletBinding()]
 param (
     [switch]$NoMedia,
-    [switch]$Build
+    [switch]$Build,
+    [string]$BasePath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -40,6 +45,10 @@ if ($NoMedia) {
 
 if ($Build) {
     $nodeArgs += "--build"
+}
+
+if ($BasePath) {
+    $nodeArgs += @("--base-path", $BasePath)
 }
 
 Write-Host "--- Artmax Studio Journal Static Export Packaging ---" -ForegroundColor Cyan

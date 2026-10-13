@@ -266,10 +266,26 @@ export function Experience({
 
     // 2. Fetch and Initialize Data
     useEffect(() => {
-        fetch('/portfolio.json')
+        const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
+        const withBasePath = (url?: string) => {
+            if (!url || !basePath) return url || '';
+            if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('//')) return url;
+            if (url.startsWith(basePath)) return url;
+            return `${basePath}${url.startsWith('/') ? '' : '/'}${url}`;
+        };
+
+        fetch(withBasePath('/portfolio.json'))
             .then(res => res.json())
             .then(data => {
-                const sorted = [...data].sort((a, b) => a.id - b.id);
+                const sorted = [...data].map(item => ({
+                    ...item,
+                    previewSrc: withBasePath(item.previewSrc),
+                    fullSrc: withBasePath(item.fullSrc),
+                    srcDesktop: withBasePath(item.srcDesktop),
+                    srcDesktopFallback: withBasePath(item.srcDesktopFallback),
+                    srcMobile: withBasePath(item.srcMobile),
+                    posterSrc: withBasePath(item.posterSrc),
+                })).sort((a, b) => a.id - b.id);
                 const spacingVal = 6.5;
                 const spreadVal = 29.3;
                 const seedVal = 1519;

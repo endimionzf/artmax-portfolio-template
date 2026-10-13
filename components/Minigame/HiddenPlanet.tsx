@@ -49,8 +49,9 @@ export function HiddenPlanet({ isGameActive, onDiscover }: HiddenPlanetProps) {
 
     // Audio setup/update
     useEffect(() => {
+        const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
         const loader = new THREE.AudioLoader();
-        loader.load('/audio/birds.ogg', (buffer) => {
+        loader.load(`${basePath}/audio/birds.ogg`, (buffer) => {
             audio.setBuffer(buffer);
             audio.setVolume(baseVolume);
             

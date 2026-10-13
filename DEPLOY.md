@@ -1,86 +1,58 @@
-# Hostico (cPanel) Deployment Guide
+# Static Site Deployment Guide
 
-This guide will help you deploy your immersive portfolio to Hostico using the "Setup Node.js App" feature.
+This project is configured for pure Static Site Generation (SSG) with zero Node.js server runtime dependencies in production.
 
-## 1. Local Preparation
+All pages, media catalog metadata, WebGL bundles, and blog articles compile directly into standard static HTML, CSS, JavaScript, and media assets inside the `out/` directory.
 
-1. Run the automated bundle script:
-   ```bash
-   npm run bundle:win
-   ```
-2. This script will:
-   - Run `npm run build`.
-   - Collect `.next`, `public`, and `server.js`.
-   - Create a `deploy.zip` file in your root folder.
+---
 
-## 2. Upload and Extract
+## 1. Local Build & Packaging
 
-1. Login to your **Hostico cPanel**.
-2. Open **File Manager** and navigate to your domain's root folder (e.g., `public_html` or a subdirectory).
-3. **CRITICAL**: Delete any existing `node_modules` folder or file in that directory on the server before extracting the new zip.
-4. Upload and extract the `deploy.zip` file.
+Build and package the site using either npm or PowerShell:
 
-## 3. Configure Node.js App in cPanel
+### Full Release (Includes all media)
+Packages all static pages, assets, and videos into `deploy-static.zip`:
+```bash
+npm run package
+# OR using PowerShell
+npm run export:win
+```
 
-1. Go to **Setup Node.js App** in cPanel.
-2. Click **Create Application**.
-3. Set the following:
-   - **Node.js Version**: 18.x
-   - **Application Mode**: Production
-   - **Application Root**: `public_html/home`
-   - **Application URL**: `artmaxstudio.ro` (leave the input field after the slash empty if you want it on the main site, or put `home` if you want it at artmaxstudio.ro/home)
-   - **Application startup file**: `server.js`
-4. Click **Create**.
-5. Once created, click **Run NPM Install** (if necessary, though standalone usually handles this).
-6. Click **Restart**.
+### Lightweight Release (Excludes heavy portfolio videos)
+If video files are already uploaded to your server's `public_html/portfolio/` folder, generate a lightweight zip (~5 MB) that contains only code, styles, blog articles, audio, and metadata:
+```bash
+npm run package:nomedia
+# OR using PowerShell
+.\export.ps1 -NoMedia
+```
 
-## 4. Fix Folder Permissions
+---
 
-If your site is giving a 502/500 error, it is likely because the extracted folders don't have the right permissions:
+## 2. Server Deployment (Hostico / cPanel `public_html`)
 
-1. In cPanel **File Manager**, go to your folder.
-2. Find the **`public`** folder, right-click, and select **Change Permissions**.
-3. Set it to **`755`** (Read & Execute for Everyone).
-4. Do the same for **`public/portfolio`** and the subfolders (`video`, `3d`, `ai`).
-5. Also, ensure **`server.js`** is set to **`644`**.
+Because the site is 100% static:
+- **No Node.js Application setup** is required in cPanel.
+- **No Phusion Passenger** processes are used.
+- **No `server.js` or `node_modules`** are deployed.
 
-## 4. Troubleshooting
+### Steps:
+1. Log into your **cPanel**.
+2. Open **File Manager** and navigate to your web root (`public_html` or domain subdirectory).
+3. If previously running a Node.js App, stop/remove the Node.js application in cPanel "Setup Node.js App" and remove old `node_modules` from `public_html`.
+4. Upload `deploy-static.zip` (or `deploy-static-nomedia.zip`).
+5. Extract the archive directly into `public_html`.
+6. Verify file permissions:
+   - Folders: `755`
+   - Files: `644`
+   - `.htaccess`: `644` (ensures byte-range streaming and caching headers are active)
 
-### Slow or Stuck "NPM Install"
+---
 
-- **Wait Time**: On shared hosting, this can take 5–10 minutes.
-- **package-lock**: The script now includes `package-lock.json` to speed this up.
-- **Refresh**: If it takes more than 15 minutes, refresh the page and try clicking "Run NPM Install" again. It often resumes where it left off.
+## 3. Local Static Preview
 
-### Checking Error Logs
-
-If you see a 500 or 502 error:
-
-1.  Go to **File Manager** in cPanel.
-2.  Navigate to your **Application Root** folder (e.g., `public_html/`).
-3.  Look for a file named **`stderr.log`**.
-4.  Right-click and select **View**. This will show the exact reason the app crashed (e.g., a missing variable or a bad path).
-
-### Understanding the Bundle
-
-When you extract the ZIP, you will see a flat structure:
-
-- **`.next/`**: This contains your **compiled** application. You won't see your source `app/` or `components/` folders here—they are turned into optimized JavaScript inside `.next/server`.
-- **`public/`**: Your images and videos.
-- **`server.js`**: The brains of the app.
-- **`package.json`**: For cPanel to install dependencies.
-
-This is exactly how a production-ready Next.js app should look!
-
-### Advanced Diagnostics (No Terminal)
-
-If you don't have Terminal access in cPanel, your primary tool is the **File Manager**:
-
-1.  **Check for `stderr.log`**: This is the most common place errors are hidden.
-2.  **Check for `passenger.log`**: Sometimes Phusion Passenger (the engine) logs errors here if the app fails to even start.
-3.  **Setup Node.js App Log Field**: In the cPanel Node.js Selector, look for a field labeled **"Application log file"**. Sometimes you have to type a filename there (like `error.log`) and save for it to start recording.
-
-> [!TIP]
-> If you still see a 502/Bad Gateway after trying the latest `deploy.zip`, it's almost certainly because cPanel is "caching" a failed version of your app. Try clicking **Stop App**, then **Start App** instead of just Restart.
-
-- If you use `?debug=true`, the developer controls will appear.
+To preview the exact static export locally before deploying:
+```bash
+npm run build
+npm run preview
+```
+This starts a local static HTTP server serving the `out/` directory with full HTTP range-request support for video seeking.

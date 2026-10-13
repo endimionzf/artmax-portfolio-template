@@ -13,18 +13,21 @@
       "id": "video",
       "label": "Video",
       "color": "#ff003c",
+      "curvePreset": "video",
       "description": "Video production, editing and motion"
     },
     {
       "id": "3d",
       "label": "3D",
       "color": "#00ff41",
+      "curvePreset": "render3d",
       "description": "3D design, CGI and rendering"
     },
     {
       "id": "ai",
       "label": "AI",
       "color": "#0066ff",
+      "curvePreset": "ai",
       "description": "Generative AI and synthetic media"
     }
   ]

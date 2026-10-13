@@ -13,8 +13,8 @@ export interface CameraRigProps {
     isGridMode: boolean;
     scrollYRange?: readonly [number, number];
     totalPlanes: number;
-    activeCurve: THREE.CatmullRomCurve3 | null;
-    journeyState?: { category: 'video' | '3d' | 'ai', step: number } | null;
+    activeCurve: THREE.Curve<THREE.Vector3> | THREE.CatmullRomCurve3 | null;
+    journeyState?: { category: string, step: number } | null;
     dragStatus?: React.MutableRefObject<{ hasMoved: boolean }>;
     listener: THREE.AudioListener;
     lastPlaneZ: number;
@@ -67,7 +67,7 @@ export function CameraRig({
     // Initialize position along the curve gracefully instead of violently snapping to 0
     useEffect(() => {
         if (journeyState && !lastJourneyState.current) {
-            const activePoints = activeCurve?.points.length || 1;
+            const activePoints = (activeCurve && 'points' in activeCurve) ? (activeCurve as any).points.length : 1;
             currentCurveT.current = journeyState.step / Math.max(1, activePoints - 1);
         }
         lastJourneyState.current = journeyState;
@@ -279,7 +279,7 @@ export function CameraRig({
         }
 
         if (journeyState && activeCurve && focusTarget && !isGridMode) {
-            const totalSteps = activeCurve.points.length;
+            const totalSteps = ('points' in activeCurve) ? (activeCurve as any).points.length : 1;
             const targetT = totalSteps > 1 ? journeyState.step / (totalSteps - 1) : 0;
 
             currentCurveT.current = THREE.MathUtils.lerp(currentCurveT.current, targetT, delta * 1.5);

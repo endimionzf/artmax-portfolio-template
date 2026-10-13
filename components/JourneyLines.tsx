@@ -163,16 +163,17 @@ function CyberTube({ curve, segments, radius, radialSegments, color, opacity, is
 }
 
 // Custom component for the Video line with a YouTube-style playhead aesthetic
-function VideoTube({ curve, segments, radius, radialSegments, isVisible, onClick }: any) {
+function VideoTube({ curve, segments, radius, radialSegments, isVisible, onClick, color = '#ff003c' }: any) {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const spriteRef = useRef<THREE.Sprite>(null);
   const startTimeRef = useRef<number | null>(null);
   
   const uniforms = useMemo(() => ({
+    uColor: { value: new THREE.Color(color) },
     uOpacity: { value: 0.0 },
     uCycleProgress: { value: 0.0 },
     uIsFade: { value: 0.0 }
-  }), []);
+  }), [color]);
 
   const playheadTexture = useMemo(() => {
     const canvas = document.createElement('canvas');
@@ -182,11 +183,11 @@ function VideoTube({ curve, segments, radius, radialSegments, isVisible, onClick
     if (ctx) {
       ctx.beginPath();
       ctx.arc(32, 32, 28, 0, Math.PI * 2);
-      ctx.fillStyle = '#ff0000';
+      ctx.fillStyle = color;
       ctx.fill();
     }
     return new THREE.CanvasTexture(canvas);
-  }, []);
+  }, [color]);
 
   useEffect(() => {
     return () => {
@@ -276,17 +277,17 @@ function VideoTube({ curve, segments, radius, radialSegments, isVisible, onClick
             }
           `}
           fragmentShader={`
+            uniform vec3 uColor;
             uniform float uOpacity;
             uniform float uCycleProgress;
             uniform float uIsFade;
             varying vec2 vUv;
             
             void main() {
-              vec3 red = vec3(1.0, 0.0, 0.0); // Pure Red #ff0000
               vec3 white = vec3(1.0, 1.0, 1.0);
               
-              // Base color: Red behind progress, White ahead
-              vec3 baseColor = vUv.x <= uCycleProgress ? red : white;
+              // Base color: Configured color behind progress, White ahead
+              vec3 baseColor = vUv.x <= uCycleProgress ? uColor : white;
               
               // Fade back to white at cycle end
               vec3 finalColor = mix(baseColor, white, uIsFade);
@@ -311,19 +312,23 @@ function VideoTube({ curve, segments, radius, radialSegments, isVisible, onClick
   );
 }
 
+import siteConfig from '@/site.config.json';
+
 interface JourneyLinesProps {
   visibleLines: string[];
   isGridMode: boolean;
-  videoCurve: THREE.Curve<THREE.Vector3> | null;
-  render3dCurve: THREE.Curve<THREE.Vector3> | null;
-  aiCurve: THREE.Curve<THREE.Vector3> | null;
-  onLineClick?: (category: 'video' | '3d' | 'ai') => void;
+  curves?: Record<string, THREE.Curve<THREE.Vector3> | null>;
+  videoCurve?: THREE.Curve<THREE.Vector3> | null;
+  render3dCurve?: THREE.Curve<THREE.Vector3> | null;
+  aiCurve?: THREE.Curve<THREE.Vector3> | null;
+  onLineClick?: (category: string) => void;
   onGizmoDragStatus?: (isDragging: boolean) => void;
 }
 
 export function JourneyLines({ 
   visibleLines, 
   isGridMode, 
+  curves,
   videoCurve, 
   render3dCurve, 
   aiCurve, 
@@ -332,136 +337,148 @@ export function JourneyLines({
 }: JourneyLinesProps) {
   const [offsets, setOffsets] = useState<THREE.Vector3[]>([]);
   
+  const categories = (siteConfig.categories as Array<{ id: string, color: string, curvePreset?: string }> | undefined) || [
+    { id: 'video', color: '#ff003c', curvePreset: 'video' },
+    { id: '3d', color: '#00ff41', curvePreset: 'render3d' },
+    { id: 'ai', color: '#0066ff', curvePreset: 'ai' }
+  ];
+
+  const render3dCat = categories.find(c => (c.curvePreset || (c.id === '3d' ? 'render3d' : '')) === 'render3d') || { id: '3d' };
+  const rawRender3dCurve = curves?.[render3dCat.id] || render3dCurve;
+
   // Sync offsets when base curve changes or length moves
   useEffect(() => {
-    if (render3dCurve && 'points' in render3dCurve) {
-       const pts = (render3dCurve as any).points as THREE.Vector3[];
+    if (rawRender3dCurve && 'points' in rawRender3dCurve) {
+       const pts = (rawRender3dCurve as any).points as THREE.Vector3[];
        if (offsets.length !== pts.length) {
          setOffsets(pts.map(() => new THREE.Vector3(0, 0, 0)));
        }
     } else {
        setOffsets([]);
     }
-  }, [render3dCurve]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rawRender3dCurve]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Derive the active curve from base + offsets
   const activeRender3dCurve = useMemo(() => {
-    if (!render3dCurve || !('points' in render3dCurve) || offsets.length === 0) return render3dCurve;
-    const originalPoints = (render3dCurve as any).points as THREE.Vector3[];
-    if (offsets.length !== originalPoints.length) return render3dCurve;
+    if (!rawRender3dCurve || !('points' in rawRender3dCurve) || offsets.length === 0) return rawRender3dCurve;
+    const originalPoints = (rawRender3dCurve as any).points as THREE.Vector3[];
+    if (offsets.length !== originalPoints.length) return rawRender3dCurve;
 
     const modifiedPoints = originalPoints.map((p, i) => p.clone().add(offsets[i]));
     return new THREE.CatmullRomCurve3(modifiedPoints, false, 'centripetal', 0.5);
-  }, [render3dCurve, offsets]);
+  }, [rawRender3dCurve, offsets]);
 
   if (isGridMode) return null;
 
-  // Tubing needs a segment count to smoothly render the curve.
-  const videoSegments = videoCurve && 'points' in videoCurve ? Math.max(200, (videoCurve as any).points.length * 20) : 400;
-  const render3dSegments = activeRender3dCurve && 'points' in activeRender3dCurve ? Math.max(200, (activeRender3dCurve as any).points.length * 20) : 400;
-  const aiSegments = aiCurve && 'points' in aiCurve ? Math.max(200, (aiCurve as any).points.length * 20) : 600;
-
   return (
     <group>
-      {/* 🔴 RED: The Analog Waveform (Video) - YouTube style playhead */}
-      {videoCurve && (
-          <VideoTube 
-             curve={videoCurve} 
-             segments={videoSegments} 
-             radius={0.06} 
-             radialSegments={8} 
-             isVisible={visibleLines.includes('video')} 
-             onClick={() => onLineClick?.('video')}
-          />
-      )}
+      {categories.map((cat) => {
+        const curve = curves?.[cat.id] || (cat.id === 'video' ? videoCurve : cat.id === '3d' ? render3dCurve : cat.id === 'ai' ? aiCurve : null);
+        if (!curve) return null;
 
-       {/* 🟢 GREEN: Architectural Wireframe (3D) */}
-      {activeRender3dCurve && (
-          <AnimatedTube 
-             curve={activeRender3dCurve} 
-             tubularSegments={render3dSegments} 
-             radius={0.015} 
-             radialSegments={8} 
-             color="#00ff41" 
-             opacity={0.6} 
-             wireframe={true}
-             isVisible={visibleLines.includes('3d')} 
-             onClick={() => onLineClick?.('3d')}
-          />
-      )}
+        const isVisible = visibleLines.includes(cat.id);
+        const preset = cat.curvePreset || (cat.id === '3d' ? 'render3d' : cat.id === 'ai' ? 'ai' : 'video');
+        const segments = curve && 'points' in curve ? Math.max(200, (curve as any).points.length * 20) : (preset === 'ai' ? 600 : 400);
 
-      {/* Interactive Spline Nodes for 3D Line */}
-      {visibleLines.includes('3d') && render3dCurve && 'points' in render3dCurve && offsets.length === (render3dCurve as any).points.length &&
-        (render3dCurve as any).points.map((p: THREE.Vector3, i: number) => {
-          // Only show vertices that are between planes (heuristic: odd indices often fall in connectors)
-          // and skip first/last to avoid breaking flow too much
-          if (i === 0 || i === offsets.length - 1 || i % 2 === 0) return null;
-
-          // the current offset for this point
-          const currentOffset = offsets[i];
-          
-          // Construct a matrix that represents the Absolute clamped position
-          // By setting anchor to [0,0,0], the matrix becomes the world transform.
-          const clampingMatrix = new THREE.Matrix4().makeTranslation(
-             p.x + currentOffset.x,
-             p.y + currentOffset.y,
-             p.z + currentOffset.z
-          );
-
+        if (preset === 'video') {
           return (
-            <PivotControls
-              key={`node-${i}-${p.x}-${p.z}`}
-              anchor={[0, 0, 0]}
-              matrix={clampingMatrix}
-              depthTest={true}
-              disableRotations
-              disableScaling
-              activeAxes={[true, true, true]}
-              scale={0.9}
-              lineWidth={3}
-              onDragStart={() => onGizmoDragStatus?.(true)}
-              onDragEnd={() => onGizmoDragStatus?.(false)}
-              onDrag={(m) => {
-                const newWorldPos = new THREE.Vector3();
-                newWorldPos.setFromMatrixPosition(m);
-                
-                // Calculate the offset relative to the original point p
-                const newOffset = newWorldPos.clone().sub(p);
-                
-                setOffsets(prev => {
-                  const next = [...prev];
-                  const clampedOffset = newOffset.clone();
-                  // Clamp to 2.0 unit threshold
-                  if (clampedOffset.length() > 2.0) {
-                    clampedOffset.normalize().multiplyScalar(2.0);
-                  }
-                  next[i] = clampedOffset;
-                  return next;
-                });
-              }}
-            >
-              <mesh position={new THREE.Vector3(0,0,0)}>
-                <boxGeometry args={[0.08, 0.08, 0.08]} />
-                <meshStandardMaterial color="#00ff41" emissive="#00ff41" emissiveIntensity={2} />
-              </mesh>
-            </PivotControls>
-          )
-        })
-      }
+            <VideoTube 
+              key={cat.id}
+              curve={curve} 
+              segments={segments} 
+              radius={0.06} 
+              radialSegments={8} 
+              color={cat.color}
+              isVisible={isVisible} 
+              onClick={() => onLineClick?.(cat.id)}
+            />
+          );
+        }
 
-      {/* 🔵 BLUE: The Synaptic Flow (AI) - Cyberpunk Manhattan style */}
-      {aiCurve && (
-          <CyberTube 
-             curve={aiCurve} 
-             segments={aiSegments} 
-             radius={0.02} 
-             radialSegments={4} 
-             color="#00f3ff" 
-             opacity={0.9} 
-             isVisible={visibleLines.includes('ai')} 
-             onClick={() => onLineClick?.('ai')}
-          />
-      )}
+        if (preset === 'render3d') {
+          return (
+            <React.Fragment key={cat.id}>
+              <AnimatedTube 
+                curve={activeRender3dCurve || curve} 
+                tubularSegments={segments} 
+                radius={0.015} 
+                radialSegments={8} 
+                color={cat.color} 
+                opacity={0.6} 
+                wireframe={true}
+                isVisible={isVisible} 
+                onClick={() => onLineClick?.(cat.id)}
+              />
+
+              {/* Interactive Spline Nodes for 3D Line */}
+              {isVisible && rawRender3dCurve && 'points' in rawRender3dCurve && offsets.length === (rawRender3dCurve as any).points.length &&
+                (rawRender3dCurve as any).points.map((p: THREE.Vector3, i: number) => {
+                  if (i === 0 || i === offsets.length - 1 || i % 2 === 0) return null;
+                  const currentOffset = offsets[i];
+                  const clampingMatrix = new THREE.Matrix4().makeTranslation(
+                    p.x + currentOffset.x,
+                    p.y + currentOffset.y,
+                    p.z + currentOffset.z
+                  );
+
+                  return (
+                    <PivotControls
+                      key={`node-${cat.id}-${i}-${p.x}-${p.z}`}
+                      anchor={[0, 0, 0]}
+                      matrix={clampingMatrix}
+                      depthTest={true}
+                      disableRotations
+                      disableScaling
+                      activeAxes={[true, true, true]}
+                      scale={0.9}
+                      lineWidth={3}
+                      onDragStart={() => onGizmoDragStatus?.(true)}
+                      onDragEnd={() => onGizmoDragStatus?.(false)}
+                      onDrag={(m) => {
+                        const newWorldPos = new THREE.Vector3();
+                        newWorldPos.setFromMatrixPosition(m);
+                        const newOffset = newWorldPos.clone().sub(p);
+                        setOffsets(prev => {
+                          const next = [...prev];
+                          const clampedOffset = newOffset.clone();
+                          if (clampedOffset.length() > 2.0) {
+                            clampedOffset.normalize().multiplyScalar(2.0);
+                          }
+                          next[i] = clampedOffset;
+                          return next;
+                        });
+                      }}
+                    >
+                      <mesh position={new THREE.Vector3(0,0,0)}>
+                        <boxGeometry args={[0.08, 0.08, 0.08]} />
+                        <meshStandardMaterial color={cat.color} emissive={cat.color} emissiveIntensity={2} />
+                      </mesh>
+                    </PivotControls>
+                  );
+                })
+              }
+            </React.Fragment>
+          );
+        }
+
+        if (preset === 'ai') {
+          return (
+            <CyberTube 
+              key={cat.id}
+              curve={curve} 
+              segments={segments} 
+              radius={0.02} 
+              radialSegments={4} 
+              color={cat.color} 
+              opacity={0.9} 
+              isVisible={isVisible} 
+              onClick={() => onLineClick?.(cat.id)}
+            />
+          );
+        }
+
+        return null;
+      })}
     </group>
   );
 }

@@ -40,17 +40,17 @@ export default function Home() {
   }, []);
 
   // Controls the fixed slideshow sequence length based on user click
-  const [journeyState, setJourneyState] = useState<{ category: 'video' | '3d' | 'ai', step: number } | null>(null);
+  const [journeyState, setJourneyState] = useState<{ category: string, step: number } | null>(null);
   // We need to know max planes to bound the next/prev buttons, Experience can bubble this up
-  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({ video: 0, '3d': 0, 'ai': 0 });
+  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
 
-  const toggleLine = (category: 'video' | '3d' | 'ai') => {
+  const toggleLine = (category: string) => {
     setVisibleLines(prev => prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]);
   };
 
   const handleNextJourney = useCallback(() => {
     if (journeyState) {
-      const max = categoryCounts[journeyState.category] - 1;
+      const max = (categoryCounts[journeyState.category] || 1) - 1;
       setJourneyState({ ...journeyState, step: Math.min(journeyState.step + 1, max) });
     }
   }, [journeyState, categoryCounts]);
@@ -63,11 +63,13 @@ export default function Home() {
 
   const handlePlanesLoaded = useCallback((planes: any[]) => {
     setCurrentPlanes(planes);
-    setCategoryCounts({
-      video: planes.filter(p => p.category === 'video').length,
-      '3d': planes.filter(p => p.category === '3d').length,
-      ai: planes.filter(p => p.category === 'ai').length
+    const counts: Record<string, number> = {};
+    planes.forEach(p => {
+      if (p.category) {
+        counts[p.category] = (counts[p.category] || 0) + 1;
+      }
     });
+    setCategoryCounts(counts);
   }, []);
 
   const handleFocusClear = useCallback(() => {
@@ -76,7 +78,7 @@ export default function Home() {
     setIsInfoOpen(false);
   }, []);
 
-  const handlePlaneClick = useCallback((category: 'video' | '3d' | 'ai', indexInCategory: number) => {
+  const handlePlaneClick = useCallback((category: string, indexInCategory: number) => {
     console.log(`[Page] handlePlaneClick - Category: ${category}, IndexInCategory: ${indexInCategory}`);
     setJourneyState({ category, step: indexInCategory });
   }, []);
@@ -85,7 +87,7 @@ export default function Home() {
     setActiveProjectInfo(planeData);
   }, []);
 
-  const handleJourneyLineClick = useCallback((category: 'video' | '3d' | 'ai') => {
+  const handleJourneyLineClick = useCallback((category: string) => {
     if (journeyState?.category === category) {
       setJourneyState(null);
     } else {

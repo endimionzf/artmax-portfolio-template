@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 
+import siteConfig from '@/site.config.json';
+
 export interface HUDProps {
   audioEnabled: boolean;
   onToggleAudio: (state: boolean) => void;
@@ -10,8 +12,9 @@ export interface HUDProps {
   isGridMode?: boolean;
   onToggleGridMode?: () => void;
   visibleLines: string[];
-  onToggleLine: (category: 'video' | '3d' | 'ai') => void;
-  journeyState?: { category: 'video' | '3d' | 'ai', step: number } | null;
+  onToggleLine: (category: string) => void;
+  journeyState?: { category: string, step: number } | null;
+  categories?: Array<{ id: string, label: string, color: string, curvePreset?: string }>;
   onNextJourney?: () => void;
   onPrevJourney?: () => void;
   maxStep?: number;
@@ -32,11 +35,18 @@ export function HUD({
   isPointingAtPlane = false, onOpenContact,
   isInfoOpen = false, onToggleInfo,
   showRadarButton = false, onRadarClick,
-  onBack
+  onBack,
+  categories
 }: HUDProps) {
   // Keep a cached copy of the info so the text doesn't instantly vanish while fading out
   const [displayInfo, setDisplayInfo] = useState<any | null>(null);
   const [isUserActive, setIsUserActive] = useState(true);
+
+  const configuredCategories = categories || (siteConfig.categories as Array<{ id: string, label: string, color: string, curvePreset?: string }> | undefined) || [
+    { id: 'video', label: 'Video', color: '#ff003c' },
+    { id: '3d', label: '3D', color: '#00ff41' },
+    { id: 'ai', label: 'AI', color: '#0066ff' }
+  ];
 
   // Toggle global hardware cursor state
   useEffect(() => {
@@ -218,32 +228,38 @@ export function HUD({
                 </div>
               )}
 
-              {/* RGB Category Buttons - Hide when focusing on a specific project */}
+              {/* Dynamic Category Buttons - Hide when focusing on a specific project */}
               {!journeyState && (
-                <div className="flex gap-4 pointer-events-auto mix-blend-difference">
-                  <button
-                    onClick={() => onToggleLine('video')}
-                    className={`flex items-center gap-2 px-4 py-2 border rounded-full transition-all duration-300 ${visibleLines.includes('video') ? 'bg-[#ff003c]/20 border-[#ff003c] shadow-[0_0_15px_rgba(255,0,60,0.5)]' : 'border-white/30 hover:bg-white/10'} opacity-100`}
-                  >
-                    <div className={`w-2 h-2 rounded-full ${visibleLines.includes('video') ? 'bg-[#ff003c] shadow-[0_0_8px_#ff003c]' : 'bg-white/70'}`} />
-                    <span className={`text-xs font-bold tracking-[0.2em] uppercase ${visibleLines.includes('video') ? 'text-[#ff003c]' : 'text-white'}`}>Video</span>
-                  </button>
-
-                  <button
-                    onClick={() => onToggleLine('3d')}
-                    className={`flex items-center gap-2 px-4 py-2 border rounded-full transition-all duration-300 ${visibleLines.includes('3d') ? 'bg-[#00ff41]/20 border-[#00ff41] shadow-[0_0_15px_rgba(0,255,65,0.5)]' : 'border-white/30 hover:bg-white/10'} opacity-100`}
-                  >
-                    <div className={`w-2 h-2 rounded-full ${visibleLines.includes('3d') ? 'bg-[#00ff41] shadow-[0_0_8px_#00ff41]' : 'bg-white/70'}`} />
-                    <span className={`text-xs font-bold tracking-[0.2em] uppercase ${visibleLines.includes('3d') ? 'text-[#00ff41]' : 'text-white'}`}>3D</span>
-                  </button>
-
-                  <button
-                    onClick={() => onToggleLine('ai')}
-                    className={`flex items-center gap-2 px-4 py-2 border rounded-full transition-all duration-300 ${visibleLines.includes('ai') ? 'bg-[#00f3ff]/20 border-[#00f3ff] shadow-[0_0_15px_rgba(0,243,255,0.5)]' : 'border-white/30 hover:bg-white/10'} opacity-100`}
-                  >
-                    <div className={`w-2 h-2 rounded-full ${visibleLines.includes('ai') ? 'bg-[#00f3ff] shadow-[0_0_8px_#00f3ff]' : 'bg-white/70'}`} />
-                    <span className={`text-xs font-bold tracking-[0.2em] uppercase ${visibleLines.includes('ai') ? 'text-[#00f3ff]' : 'text-white'}`}>AI</span>
-                  </button>
+                <div className="flex flex-wrap justify-center gap-4 pointer-events-auto mix-blend-difference">
+                  {configuredCategories.map((cat) => {
+                    const isLineVisible = visibleLines.includes(cat.id);
+                    return (
+                      <button
+                        key={cat.id}
+                        onClick={() => onToggleLine(cat.id)}
+                        className={`flex items-center gap-2 px-4 py-2 border rounded-full transition-all duration-300 ${isLineVisible ? 'hover:scale-105' : 'border-white/30 hover:bg-white/10'}`}
+                        style={{
+                          borderColor: isLineVisible ? cat.color : undefined,
+                          backgroundColor: isLineVisible ? `${cat.color}25` : undefined,
+                          boxShadow: isLineVisible ? `0 0 15px ${cat.color}80` : undefined,
+                        }}
+                      >
+                        <div
+                          className="w-2 h-2 rounded-full transition-all"
+                          style={{
+                            backgroundColor: isLineVisible ? cat.color : 'rgba(255, 255, 255, 0.7)',
+                            boxShadow: isLineVisible ? `0 0 8px ${cat.color}` : undefined,
+                          }}
+                        />
+                        <span
+                          className="text-xs font-bold tracking-[0.2em] uppercase transition-colors"
+                          style={{ color: isLineVisible ? cat.color : '#ffffff' }}
+                        >
+                          {cat.label}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -267,7 +283,30 @@ export function HUD({
             {displayInfo?.title || ''}
           </h2>
 
-          {/* Tags */}
+          {/* Tech Stack Pills (Monospace neon aesthetic) */}
+          {(displayInfo?.techStack || displayInfo?.tech_stack) && (
+            <div className="mb-8">
+              <h3 className="text-xs uppercase tracking-[0.2em] text-cyan-400/80 mb-3 font-mono">// Tech_Stack</h3>
+              <div className="flex flex-wrap gap-2">
+                {(Array.isArray(displayInfo.techStack)
+                  ? displayInfo.techStack
+                  : String(displayInfo.techStack || displayInfo.tech_stack).split(',')
+                )
+                  .map((t: string) => t.trim())
+                  .filter(Boolean)
+                  .map((tech: string, i: number) => (
+                    <span
+                      key={i}
+                      className="px-3.5 py-1.5 bg-cyan-950/40 border border-cyan-400/40 text-cyan-300 rounded-md text-xs font-mono tracking-wider shadow-[0_0_12px_rgba(6,182,212,0.15)]"
+                    >
+                      {tech}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* General Tags */}
           {displayInfo?.tags && (
             <div className="flex flex-wrap gap-3 mb-10">
               {displayInfo.tags.split(',').map((tag: string, i: number) => (
@@ -287,53 +326,105 @@ export function HUD({
 
           {/* Metadata Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8 border-t border-white/10 pt-10">
+            {displayInfo?.role && (
+              <div>
+                <h3 className="text-xs uppercase tracking-[0.2em] text-white/40 mb-2 font-mono">Role</h3>
+                <p className="text-lg text-white/90 whitespace-pre-wrap">{displayInfo.role}</p>
+              </div>
+            )}
+
             {displayInfo?.client && (
               <div>
-                <h3 className="text-xs uppercase tracking-[0.2em] text-white/40 mb-2">Client</h3>
+                <h3 className="text-xs uppercase tracking-[0.2em] text-white/40 mb-2 font-mono">Client</h3>
                 <p className="text-lg text-white/90 whitespace-pre-wrap">{displayInfo.client}</p>
+              </div>
+            )}
+
+            {displayInfo?.year && (
+              <div>
+                <h3 className="text-xs uppercase tracking-[0.2em] text-white/40 mb-2 font-mono">Year</h3>
+                <p className="text-lg text-white/90 whitespace-pre-wrap">{displayInfo.year}</p>
               </div>
             )}
 
             {displayInfo?.agency && (
               <div>
-                <h3 className="text-xs uppercase tracking-[0.2em] text-white/40 mb-2">Agency</h3>
+                <h3 className="text-xs uppercase tracking-[0.2em] text-white/40 mb-2 font-mono">Agency</h3>
                 <p className="text-lg text-white/90 whitespace-pre-wrap">{displayInfo.agency}</p>
               </div>
             )}
 
             {displayInfo?.production && (
               <div>
-                <h3 className="text-xs uppercase tracking-[0.2em] text-white/40 mb-2">Production</h3>
+                <h3 className="text-xs uppercase tracking-[0.2em] text-white/40 mb-2 font-mono">Production</h3>
                 <p className="text-lg text-white/90 whitespace-pre-wrap">{displayInfo.production}</p>
               </div>
             )}
 
             {displayInfo?.director && (
               <div>
-                <h3 className="text-xs uppercase tracking-[0.2em] text-white/40 mb-2">Director</h3>
+                <h3 className="text-xs uppercase tracking-[0.2em] text-white/40 mb-2 font-mono">Director</h3>
                 <p className="text-lg text-white/90 whitespace-pre-wrap">{displayInfo.director}</p>
               </div>
             )}
 
             {displayInfo?.producer && (
               <div>
-                <h3 className="text-xs uppercase tracking-[0.2em] text-white/40 mb-2">Producer</h3>
+                <h3 className="text-xs uppercase tracking-[0.2em] text-white/40 mb-2 font-mono">Producer</h3>
                 <p className="text-lg text-white/90 whitespace-pre-wrap">{displayInfo.producer}</p>
               </div>
             )}
 
+            {/* Context-Aware Smart Link */}
             {displayInfo?.link && (
               <div className="md:col-span-2 pt-4">
-                <a
-                  href={displayInfo.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="inline-flex items-center gap-2 text-sm uppercase tracking-[0.2em] font-bold text-white hover:text-white/70 transition-colors border-b border-white pb-1"
-                >
-                  View Project
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7" /><path d="M7 7h10v10" /></svg>
-                </a>
+                {(() => {
+                  const link = displayInfo.link.trim();
+                  const isBlog = link.startsWith('/blog') || link.startsWith('blog/');
+                  const isGitHub = link.includes('github.com');
+                  const formattedLink = link.startsWith('http') || link.startsWith('/') ? link : `/${link}`;
+
+                  if (isBlog) {
+                    return (
+                      <Link
+                        href={formattedLink}
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-3 px-6 py-3 rounded-full bg-cyan-950/60 border border-cyan-400/50 text-cyan-300 hover:bg-cyan-900/60 transition-all font-mono text-xs uppercase tracking-[0.2em] shadow-[0_0_15px_rgba(6,182,212,0.2)] hover:scale-105 active:scale-95"
+                      >
+                        Read Case Study / Article →
+                      </Link>
+                    );
+                  }
+
+                  if (isGitHub) {
+                    return (
+                      <a
+                        href={link.startsWith('http') ? link : `https://${link}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-3 px-6 py-3 rounded-full bg-white/10 border border-white/30 text-white hover:bg-white/20 transition-all font-mono text-xs uppercase tracking-[0.2em] shadow-lg hover:scale-105 active:scale-95"
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                          <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+                        </svg>
+                        View on GitHub
+                      </a>
+                    );
+                  }
+
+                  return (
+                    <a
+                      href={link.startsWith('http') ? link : `https://${link}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-2 text-sm uppercase tracking-[0.2em] font-bold text-white hover:text-white/70 transition-colors border-b border-white pb-1"
+                    >
+                      Live Project / Demo ↗
+                    </a>
+                  );
+                })()}
               </div>
             )}
           </div>

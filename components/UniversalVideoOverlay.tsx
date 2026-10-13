@@ -48,16 +48,17 @@ export function UniversalVideoOverlay({ activePlane, audioEnabled, isInfoOpen, o
     const ytContainerRef = useRef<HTMLDivElement>(null);
 
     const youtubeId = activePlane?.youtubeId;
+    const isImage = activePlane?.mediaType === 'image' || (!youtubeId && !activePlane?.srcDesktop && !activePlane?.fullSrc && !!activePlane?.posterSrc);
 
     // Local source resolution
     const localSources = useMemo(() => {
-        if (!activePlane || youtubeId) return [];
+        if (!activePlane || youtubeId || isImage) return [];
         return [
             activePlane.srcMobile,
             activePlane.srcDesktop || activePlane.fullSrc,
             activePlane.previewSrc
         ].filter((val, index, self) => val && self.indexOf(val) === index);
-    }, [activePlane?.id, youtubeId]);
+    }, [activePlane?.id, youtubeId, isImage]);
 
     const videoSrc = localSources[errorCount] || null;
 
@@ -164,7 +165,7 @@ export function UniversalVideoOverlay({ activePlane, audioEnabled, isInfoOpen, o
 
     // Autoplay logic for local videos
     useEffect(() => {
-        if (!youtubeId && videoRef.current && isLoaded) {
+        if (!youtubeId && !isImage && videoRef.current && isLoaded) {
             if (audioEnabled) {
                 videoRef.current.muted = false;
                 setInternalMuted(false);
@@ -172,11 +173,11 @@ export function UniversalVideoOverlay({ activePlane, audioEnabled, isInfoOpen, o
             }
             videoRef.current.play().catch(e => console.log("[VideoOverlay] Autoplay effect blocked:", e));
         }
-    }, [youtubeId, isLoaded, videoSrc, audioEnabled]);
+    }, [youtubeId, isImage, isLoaded, videoSrc, audioEnabled]);
 
     // Sync muted state with global audioEnabled
     useEffect(() => {
-        if (videoRef.current && !youtubeId) {
+        if (videoRef.current && !youtubeId && !isImage) {
             videoRef.current.muted = !audioEnabled;
             setInternalMuted(!audioEnabled);
             if (audioEnabled) setupAudioNodes();
@@ -249,56 +250,84 @@ export function UniversalVideoOverlay({ activePlane, audioEnabled, isInfoOpen, o
 
             {/* Main Player Area */}
             <div className="flex-1 flex items-center justify-center p-4 md:p-12 z-[55]">
-                <div className={`relative w-full max-w-[1440px] aspect-video bg-black/40 shadow-2xl rounded-2xl overflow-hidden border border-white/5 transition-all duration-1000 ${isLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}>
-                    
-                    {/* YOUTUBE PLAYER */}
-                    {youtubeId ? (
-                        <div className="absolute inset-0 w-full h-full">
-                            <div ref={ytContainerRef} />
+                {isImage ? (
+                    /* UNIVERSAL IMAGE / SCREENSHOT VIEWER */
+                    <div className={`relative flex flex-col items-center justify-center max-w-[90vw] max-h-[85vh] transition-all duration-700 ${isLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                            src={activePlane.posterSrc || activePlane.fullSrc}
+                            alt={activePlane.title || 'Portfolio Project'}
+                            className="max-w-[90vw] max-h-[75vh] object-contain rounded-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] border border-white/10 select-none"
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                        {/* Action Bar */}
+                        <div className={`mt-6 flex items-center gap-4 transition-opacity duration-500 ${isUIVisible ? 'opacity-100' : 'opacity-0'}`}>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onOpenInfo(); }}
+                                className="px-6 py-2.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white font-mono text-xs uppercase tracking-[0.2em] backdrop-blur-md transition-all shadow-lg hover:scale-105 active:scale-95"
+                            >
+                                INFO
+                            </button>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onClose(); }}
+                                className="px-6 py-2.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white font-mono text-xs uppercase tracking-[0.2em] backdrop-blur-md transition-all hover:scale-105 active:scale-95"
+                            >
+                                CLOSE
+                            </button>
                         </div>
-                    ) : (
-                        /* LOCAL FALLBACK PLAYER */
-                        videoSrc ? (
-                            <>
-                                <video
-                                    ref={videoRef}
-                                    key={videoSrc}
-                                    src={videoSrc}
-                                    autoPlay
-                                    muted={internalMuted}
-                                    playsInline
-                                    loop
-                                    className={`w-full h-full object-contain transition-opacity duration-1000 ${isLoadingLocal ? 'opacity-0' : 'opacity-100'}`}
-                                    onLoadedMetadata={() => {
-                                        setIsLoadingLocal(false);
-                                        videoRef.current?.play().catch(e => console.log("[VideoOverlay] Autoplay blocked:", e));
-                                    }}
-                                    onPlaying={() => setIsLoadingLocal(false)}
-                                    onError={() => setErrorCount(prev => prev + 1)}
-                                />
-                                {isLoadingLocal && (
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                        <div className="w-10 h-10 border-2 border-white/10 border-t-white/80 rounded-full animate-spin" />
-                                    </div>
-                                )}
-                                {!isLoadingLocal && videoRef.current?.paused && (
-                                    <div 
-                                        className="absolute inset-0 flex items-center justify-center bg-black/20 cursor-pointer"
-                                        onClick={handleManualPlayLocal}
-                                    >
-                                        <div className="w-20 h-20 rounded-full bg-white/10 border border-white/20 flex items-center justify-center hover:bg-white/20 transition-all">
-                                            <div className="w-0 h-0 border-t-[15px] border-t-transparent border-l-[25px] border-l-white border-b-[15px] border-b-transparent ml-2" />
-                                        </div>
-                                    </div>
-                                )}
-                            </>
-                        ) : (
-                            <div className="absolute inset-0 flex items-center justify-center text-white/20 uppercase tracking-widest text-xs">
-                                No Video Content Available
+                    </div>
+                ) : (
+                    <div className={`relative w-full max-w-[1440px] aspect-video bg-black/40 shadow-2xl rounded-2xl overflow-hidden border border-white/5 transition-all duration-1000 ${isLoaded ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}>
+                        
+                        {/* YOUTUBE PLAYER */}
+                        {youtubeId ? (
+                            <div className="absolute inset-0 w-full h-full">
+                                <div ref={ytContainerRef} />
                             </div>
-                        )
-                    )}
-                </div>
+                        ) : (
+                            /* LOCAL FALLBACK PLAYER */
+                            videoSrc ? (
+                                <>
+                                    <video
+                                        ref={videoRef}
+                                        key={videoSrc}
+                                        src={videoSrc}
+                                        autoPlay
+                                        muted={internalMuted}
+                                        playsInline
+                                        loop
+                                        className={`w-full h-full object-contain transition-opacity duration-1000 ${isLoadingLocal ? 'opacity-0' : 'opacity-100'}`}
+                                        onLoadedMetadata={() => {
+                                            setIsLoadingLocal(false);
+                                            videoRef.current?.play().catch(e => console.log("[VideoOverlay] Autoplay blocked:", e));
+                                        }}
+                                        onPlaying={() => setIsLoadingLocal(false)}
+                                        onError={() => setErrorCount(prev => prev + 1)}
+                                    />
+                                    {isLoadingLocal && (
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <div className="w-10 h-10 border-2 border-white/10 border-t-white/80 rounded-full animate-spin" />
+                                        </div>
+                                    )}
+                                    {!isLoadingLocal && videoRef.current?.paused && (
+                                        <div 
+                                            className="absolute inset-0 flex items-center justify-center bg-black/20 cursor-pointer"
+                                            onClick={handleManualPlayLocal}
+                                        >
+                                            <div className="w-20 h-20 rounded-full bg-white/10 border border-white/20 flex items-center justify-center hover:bg-white/20 transition-all">
+                                                <div className="w-0 h-0 border-t-[15px] border-t-transparent border-l-[25px] border-l-white border-b-[15px] border-b-transparent ml-2" />
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <div className="absolute inset-0 flex items-center justify-center text-white/20 uppercase tracking-widest text-xs">
+                                    No Video Content Available
+                                </div>
+                            )
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );

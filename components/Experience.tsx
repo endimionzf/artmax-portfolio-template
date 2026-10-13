@@ -95,11 +95,11 @@ interface ExperienceProps {
     isGridMode: boolean;
     isStarted: boolean;
     visibleLines: string[];
-    journeyState?: { category: 'video' | '3d' | 'ai', step: number } | null;
+    journeyState?: { category: string, step: number } | null;
     onOpenInfo: (plane: any) => void;
     onFocusClear?: () => void;
-    onJourneyLineClick?: (category: 'video' | '3d' | 'ai') => void;
-    onPlaneClick?: (category: 'video' | '3d' | 'ai', indexInCategory: number) => void;
+    onJourneyLineClick?: (category: string) => void;
+    onPlaneClick?: (category: string, indexInCategory: number) => void;
     onPlanesLoaded?: (planes: PlaneData[]) => void;
     onCenterPoint?: (focused: boolean) => void;
     isInfoOpen?: boolean;
@@ -319,9 +319,7 @@ export function Experience({
     // 2. Journey & Navigation Hooks
     const { journeyCurves, cameraCurves } = useJourneyPath(planes);
 
-    const activeCameraCurve = journeyState?.category === 'video' ? cameraCurves.video :
-        journeyState?.category === '3d' ? cameraCurves.render3d :
-            journeyState?.category === 'ai' ? cameraCurves.ai : null;
+    const activeCameraCurve = journeyState?.category ? (cameraCurves[journeyState.category] || null) : null;
 
     // 3. UI & Controls (Leva)
     const audioControls = useControls('Audio', {
@@ -612,6 +610,7 @@ export function Experience({
                     <JourneyLines
                         visibleLines={visibleLines}
                         isGridMode={isGridMode}
+                        curves={journeyCurves}
                         videoCurve={journeyCurves.video}
                         render3dCurve={journeyCurves.render3d}
                         aiCurve={journeyCurves.ai}

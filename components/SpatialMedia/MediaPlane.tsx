@@ -22,7 +22,7 @@ interface MediaPlaneProps {
     srcDesktopFallback?: string;
     srcMobile?: string;
     posterSrc?: string;
-    category: 'video' | '3d' | 'ai';
+    category: string;
     youtubeId?: string;
     isActiveJourney?: boolean;
     audioEnabled: boolean;

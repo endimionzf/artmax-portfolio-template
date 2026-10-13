@@ -13,7 +13,7 @@ export const getPseudo = (s: number): number => {
  * Generates framing points for a journey path based on plane positions.
  * Used to create the visual spline line that flows around the planes.
  */
-export const generateFramingPoints = (planes: any[], category: 'video' | '3d' | 'ai'): THREE.Vector3[] => {
+export const generateFramingPoints = (planes: any[], category: string): THREE.Vector3[] => {
     const catPlanes = planes.filter(p => p.category === category);
     if (catPlanes.length === 0) return [];
     
@@ -49,7 +49,7 @@ export const generateFramingPoints = (planes: any[], category: 'video' | '3d' | 
  * Generates camera focus points along the path.
  * Usually matches the center of the planes with a vertical offset.
  */
-export const generateCameraPoints = (planes: any[], category: 'video' | '3d' | 'ai'): THREE.Vector3[] => {
+export const generateCameraPoints = (planes: any[], category: string): THREE.Vector3[] => {
     const catPlanes = planes.filter(p => p.category === category);
     // Camera path matches the old logic: center of plane offset by -1.6 on Y
     return catPlanes.map(p => new THREE.Vector3(p.position[0], p.position[1] - 1.6, p.position[2]));

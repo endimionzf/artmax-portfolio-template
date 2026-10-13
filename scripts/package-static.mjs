@@ -4,7 +4,7 @@
  * package-static.mjs
  * Cross-platform packaging script for Next.js static export (`out/`).
  * Bundles the static site into a deploy-ready ZIP archive for cPanel `public_html` or any static host.
- * Supports --base-path (e.g. /template) for subfolder deployments and GitHub Pages.
+ * Automatically reads deployment settings from `site.config.json` with CLI flag overrides.
  */
 
 import fs from 'node:fs';
@@ -17,7 +17,19 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 const outDir = path.join(rootDir, 'out');
 
-// Parse CLI flags
+// 1. Read default configuration from site.config.json
+let configBasePath = '';
+const configPath = path.join(rootDir, 'site.config.json');
+if (fs.existsSync(configPath)) {
+  try {
+    const siteConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    configBasePath = siteConfig.deployment?.basePath || siteConfig.basePath || '';
+  } catch (e) {
+    console.warn('⚠️  Could not parse site.config.json, using defaults.');
+  }
+}
+
+// 2. Parse CLI flags
 const args = process.argv.slice(2);
 const noMedia = args.includes('--no-media') || args.includes('-nomedia');
 const forceBuild = args.includes('--build');
@@ -26,7 +38,9 @@ const outputIndex = args.indexOf('--output');
 const customOutput = outputIndex !== -1 && args[outputIndex + 1] ? args[outputIndex + 1] : null;
 
 const basePathIndex = args.indexOf('--base-path') !== -1 ? args.indexOf('--base-path') : args.indexOf('-basepath');
-let basePath = basePathIndex !== -1 && args[basePathIndex + 1] ? args[basePathIndex + 1] : (process.env.BASE_PATH || '');
+let basePath = basePathIndex !== -1 && args[basePathIndex + 1] 
+  ? args[basePathIndex + 1] 
+  : (process.env.BASE_PATH || configBasePath);
 
 if (basePath && !basePath.startsWith('/')) {
   basePath = '/' + basePath;
@@ -45,12 +59,12 @@ const stagingDir = path.join(rootDir, '.deploy-staging');
 
 console.log('\n📦 \x1b[36mArtmax Studio Journal — Static Release Packager\x1b[0m');
 console.log(`Mode:      \x1b[33m${noMedia ? 'No-Media (Code & Assets only)' : 'Full (Includes All Media)'}\x1b[0m`);
-console.log(`Base Path: \x1b[35m${basePath || '/ (Root Domain)'}\x1b[0m`);
+console.log(`Base Path: \x1b[35m${basePath || '/ (Root Domain)'}\x1b[0m ${basePath === configBasePath && configBasePath ? '(from site.config.json)' : ''}`);
 console.log(`Target:    \x1b[32m${zipFilename}\x1b[0m\n`);
 
 const startTime = Date.now();
 
-// 1. Verify or trigger build (always rebuild if basePath is explicitly passed or --build requested)
+// 3. Verify or trigger build (rebuild if basePath is active, forceBuild requested, or out/ is missing)
 const needsRebuild = forceBuild || Boolean(basePath) || !fs.existsSync(outDir) || !fs.existsSync(path.join(outDir, 'index.html'));
 
 if (needsRebuild) {
@@ -71,13 +85,13 @@ if (!fs.existsSync(outDir) || !fs.existsSync(path.join(outDir, 'index.html'))) {
   process.exit(1);
 }
 
-// 2. Prepare staging directory
+// 4. Prepare staging directory
 if (fs.existsSync(stagingDir)) {
   fs.rmSync(stagingDir, { recursive: true, force: true });
 }
 fs.mkdirSync(stagingDir, { recursive: true });
 
-// 3. Copy files to staging with media filter
+// 5. Copy files to staging with media filter
 let fileCount = 0;
 let mediaFilesSkipped = 0;
 const mediaExtensions = new Set(['.mp4', '.webm', '.mov', '.ogg']);
@@ -105,7 +119,7 @@ function copyFiltered(src, dest) {
 console.log('📂 Staging files for packaging...');
 copyFiltered(outDir, stagingDir);
 
-// 4. Adapt .htaccess for the target path (remove RewriteBase / and point 404 to basePath)
+// 6. Adapt .htaccess for the target path (remove RewriteBase / and point 404 to basePath)
 const htaccessPath = path.join(outDir, '.htaccess');
 if (fs.existsSync(htaccessPath)) {
   let htContent = fs.readFileSync(htaccessPath, 'utf8');
@@ -119,7 +133,7 @@ if (fs.existsSync(htaccessPath)) {
 
 console.log(`✓ Staged ${fileCount} files${mediaFilesSkipped > 0 ? ` (${mediaFilesSkipped} heavy media files excluded)` : ''}`);
 
-// 5. Create ZIP archive
+// 7. Create ZIP archive
 if (fs.existsSync(zipFilePath)) {
   fs.rmSync(zipFilePath, { force: true });
 }
@@ -152,10 +166,10 @@ try {
   process.exit(1);
 }
 
-// 6. Clean up staging
+// 8. Clean up staging
 fs.rmSync(stagingDir, { recursive: true, force: true });
 
-// 7. Verify zip output and print summary
+// 9. Verify zip output and print summary
 if (!fs.existsSync(zipFilePath)) {
   console.error('\x1b[31mError: Expected output archive was not created.\x1b[0m');
   process.exit(1);

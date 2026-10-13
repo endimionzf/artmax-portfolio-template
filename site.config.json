@@ -1,0 +1,31 @@
+{
+  "$schema": "./site.config.schema.json",
+  "deployment": {
+    "basePath": "/template",
+    "_comment": "Where the site is deployed. Leave empty '' for domain root (e.g. artmaxstudio.ro/), or set to '/template' for subfolder, or '/repo-name' for GitHub Pages."
+  },
+  "site": {
+    "title": "Artmax Studio",
+    "description": "Immersive 3D Spatial Portfolio & Journal"
+  },
+  "categories": [
+    {
+      "id": "video",
+      "label": "Video",
+      "color": "#ff003c",
+      "description": "Video production, editing and motion"
+    },
+    {
+      "id": "3d",
+      "label": "3D",
+      "color": "#00ff41",
+      "description": "3D design, CGI and rendering"
+    },
+    {
+      "id": "ai",
+      "label": "AI",
+      "color": "#0066ff",
+      "description": "Generative AI and synthetic media"
+    }
+  ]
+}

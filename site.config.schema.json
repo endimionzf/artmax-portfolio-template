@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SiteConfiguration",
+  "type": "object",
+  "properties": {
+    "deployment": {
+      "type": "object",
+      "description": "Deployment location and path settings",
+      "properties": {
+        "basePath": {
+          "type": "string",
+          "description": "Subdirectory prefix for deployment. Set to empty string '' for domain root (e.g. artmaxstudio.ro/), '/template' for a subfolder, or '/repo-name' for GitHub Pages.",
+          "default": ""
+        },
+        "_comment": {
+          "type": "string"
+        }
+      },
+      "required": ["basePath"]
+    },
+    "site": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Main title of the portfolio/journal website"
+        },
+        "description": {
+          "type": "string",
+          "description": "Meta description for search engines and social cards"
+        }
+      }
+    },
+    "categories": {
+      "type": "array",
+      "description": "Portfolio category tags, display names, and neon glow colors in 3D WebGL space",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Internal category identifier matching the CSV category column (e.g. video, 3d, ai, motion)"
+          },
+          "label": {
+            "type": "string",
+            "description": "Human-readable label shown in the HUD filter buttons"
+          },
+          "color": {
+            "type": "string",
+            "description": "Hex color code for the 3D ribbon curve and HUD neon glow (e.g. #ff003c)"
+          },
+          "description": {
+            "type": "string",
+            "description": "Brief description of the category"
+          }
+        },
+        "required": ["id", "label", "color"]
+      }
+    }
+  },
+  "required": ["deployment"]
+}

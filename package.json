@@ -11,6 +11,7 @@
     "prebuild": "node scripts/generate-portfolio-json.mjs && node scripts/generate-sitemap.mjs",
     "build": "next build --webpack",
     "generate:portfolio": "node scripts/generate-portfolio-json.mjs",
+    "migrate:media": "node scripts/migrate-to-flat-media.mjs",
     "preview": "npx serve out",
     "lint": "eslint",
     "sitemap": "node scripts/generate-sitemap.mjs",

@@ -12,6 +12,7 @@
     "build": "next build --webpack",
     "generate:portfolio": "node scripts/generate-portfolio-json.mjs",
     "migrate:media": "node scripts/migrate-to-flat-media.mjs",
+    "edit": "node scripts/editor-server.mjs",
     "preview": "npx serve out",
     "lint": "eslint",
     "sitemap": "node scripts/generate-sitemap.mjs",

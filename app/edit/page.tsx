@@ -134,25 +134,48 @@ export default function EditPage() {
     fetch(`${basePath}/portfolio.json`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data && Array.isArray(data.items)) {
-          const mapped: ProjectRecord[] = data.items.map((it: any) => ({
-            filename: it.filename || '',
-            title: it.title || '',
-            description: it.description || '',
-            category: it.category || 'video',
-            techStack: it.techStack || '',
-            role: it.role || '',
-            client: it.client || '',
-            agency: it.agency || '',
-            production: it.production || '',
-            director: it.director || '',
-            producer: it.producer || '',
-            tags: it.tags || '',
-            link: it.link || '',
-            youtubeId: it.youtubeId || '',
-            year: it.year || '',
-          }));
+        const rawList = Array.isArray(data) ? data : (data?.items || []);
+        if (rawList.length > 0) {
+          const mapped: ProjectRecord[] = rawList.map((it: any) => {
+            let fn = it.filename || '';
+            if (!fn && it.posterSrc) {
+              const parts = it.posterSrc.split('/');
+              const file = parts[parts.length - 1];
+              fn = file.replace(/\.[^/.]+$/, '');
+            }
+            return {
+              filename: fn,
+              title: it.title || '',
+              description: it.description || '',
+              category: it.category || 'video',
+              techStack: it.techStack || '',
+              role: it.role || '',
+              client: it.client || '',
+              agency: it.agency || '',
+              production: it.production || '',
+              director: it.director || '',
+              producer: it.producer || '',
+              tags: it.tags || '',
+              link: it.link || '',
+              youtubeId: it.youtubeId || '',
+              year: it.year ? String(it.year) : '',
+            };
+          });
           setProjects((prev) => (prev.length === 0 ? mapped : prev));
+        }
+      })
+      .catch(() => {});
+
+    // Also preload local metadata.csv if available for exact CSV headers
+    fetch(`${basePath}/portfolio/metadata.csv`)
+      .then((res) => (res.ok ? res.text() : null))
+      .then((csvText) => {
+        if (csvText) {
+          const { headers, projects: loadedProjects } = projectsFromCSV(csvText);
+          if (loadedProjects.length > 0) {
+            setCsvHeaders(headers);
+            setProjects(loadedProjects);
+          }
         }
       })
       .catch(() => {});

@@ -12,10 +12,10 @@
   },
   "branding": {
     "logoType": "image",
-    "logoImage": "/artmax_logo.png",
-    "logoText": "Artmax Studio",
-    "logoAlt": "Artmax Logo",
-    "contactButtonTitle": "Contact Artmax Studio"
+    "logoImage": "/levenshtein-escrow.png",
+    "logoText": "Levenshtein Escrow",
+    "logoAlt": "Levenshtein Escrow",
+    "contactButtonTitle": "Contact Levenshtein Escrow"
   },
   "navigation": {
     "showJournalLink": true,
@@ -23,7 +23,7 @@
     "journalLinkUrl": "/blog"
   },
   "startOverlay": {
-    "title": "Artmax Studio",
+    "title": "Levenshtein Escrow",
     "quote": "\"In the vastness of light and the immensity of time, every creation is a story captured in motion. How shall we witness these artifacts of imagination?\"",
     "exploreButton": {
       "title": "Explore",
@@ -36,13 +36,19 @@
     },
     "soundHint": "Sound Required",
     "controls": [
-      { "key": "WASD", "label": "explore" },
-      { "key": "Mouse", "label": "interact" }
+      {
+        "key": "WASD",
+        "label": "explore"
+      },
+      {
+        "key": "Mouse",
+        "label": "interact"
+      }
     ]
   },
   "contact": {
     "title": "Let's collaborate on your next immersive vision.",
-    "email": "maxim@artmaxstudio.ro",
+    "email": "bogdan@bocse.ro",
     "phone": "0742098443",
     "buttonText": "Return to Experience"
   },

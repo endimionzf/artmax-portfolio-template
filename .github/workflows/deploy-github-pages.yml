@@ -40,9 +40,9 @@ jobs:
       - name: Install Dependencies
         run: |
           if [ -f "immersive-web/package.json" ]; then
-            cd immersive-web && npm ci
+            cd immersive-web && npm ci --legacy-peer-deps
           else
-            npm ci
+            npm ci --legacy-peer-deps
           fi
 
       - name: Build Static Export with BasePath

@@ -164,3 +164,73 @@ export async function verifyGitHubAccess(config: GitHubConfig): Promise<{ defaul
     repoName: data.full_name,
   };
 }
+
+/**
+ * Convert a browser File object to a base64 string
+ */
+export function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const res = reader.result as string;
+      const base64 = res.split(',')[1] || res;
+      resolve(base64);
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Upload a binary file (image, logo, poster) directly to GitHub repository
+ */
+export async function uploadGitHubBinaryFile(
+  config: GitHubConfig,
+  targetPath: string,
+  base64Content: string,
+  commitMessage: string
+): Promise<{ sha: string; htmlUrl: string }> {
+  const fullPath = config.pathPrefix ? `${config.pathPrefix}/${targetPath}` : targetPath;
+  const url = `https://api.github.com/repos/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}/contents/${fullPath}`;
+
+  let existingSha: string | undefined;
+  try {
+    const existing = await fetchGitHubFile(config, targetPath);
+    existingSha = existing.sha;
+  } catch {
+    // New file
+  }
+
+  const headers: Record<string, string> = {
+    Accept: 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${config.token.trim()}`,
+  };
+
+  const body: Record<string, any> = {
+    message: commitMessage,
+    content: base64Content,
+    branch: config.branch,
+  };
+  if (existingSha) {
+    body.sha = existingSha;
+  }
+
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.message || `GitHub upload failed: ${res.status}`);
+  }
+
+  const data = await res.json();
+  return {
+    sha: data.content?.sha || '',
+    htmlUrl: data.commit?.html_url || '',
+  };
+}
+

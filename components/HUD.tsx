@@ -387,6 +387,18 @@ export function HUD({
               </div>
             )}
 
+            {/* Dynamic Custom Roles & Credits */}
+            {displayInfo?.customRoles &&
+              Object.entries(displayInfo.customRoles).map(([roleKey, roleValue]) => {
+                if (!roleValue || !String(roleValue).trim()) return null;
+                return (
+                  <div key={roleKey}>
+                    <h3 className="text-xs uppercase tracking-[0.2em] text-white/40 mb-2 font-mono">{roleKey}</h3>
+                    <p className="text-lg text-white/90 whitespace-pre-wrap">{String(roleValue)}</p>
+                  </div>
+                );
+              })}
+
             {/* Context-Aware Smart Link */}
             {displayInfo?.link && (
               <div className="md:col-span-2 pt-4">

@@ -119,10 +119,27 @@ export async function generatePortfolioJson() {
         const colYouTube = getIdx('youtubeid', 'youtube');
         const colYear = getIdx('year');
 
+        const knownColIndices = new Set([
+          colFile, colTitle, colDesc, colCat, colTech, colRole, colClient,
+          colAgency, colProduction, colDirector, colProducer, colTags, colLink, colYouTube, colYear
+        ]);
+
         if (colFile !== -1) {
           for (let r = 1; r < rows.length; r++) {
             const row = rows[r];
             if (!row[colFile]) continue;
+
+            // Collect any non-standard columns as custom roles
+            const customRoles = {};
+            for (let c = 0; c < row.length; c++) {
+              if (!knownColIndices.has(c) && rows[0][c]) {
+                const colName = rows[0][c].trim();
+                const val = (row[c] || '').trim();
+                if (colName && val) {
+                  customRoles[colName] = val;
+                }
+              }
+            }
 
             const slug = aggressiveSlugify(row[colFile]);
             csvMetadata.set(slug, {
@@ -140,6 +157,7 @@ export async function generatePortfolioJson() {
               link: colLink !== -1 ? row[colLink] : undefined,
               youtubeId: colYouTube !== -1 ? row[colYouTube] : undefined,
               year: colYear !== -1 ? row[colYear] : undefined,
+              customRoles: Object.keys(customRoles).length > 0 ? customRoles : undefined,
             });
           }
         }
@@ -259,7 +277,8 @@ export async function generatePortfolioJson() {
         tags: csvData.tags || '',
         link: csvData.link || '',
         youtubeId: csvData.youtubeId || '',
-        year: csvData.year || ''
+        year: csvData.year || '',
+        customRoles: csvData.customRoles || {}
       };
 
       allItems.push(item);
@@ -326,7 +345,8 @@ export async function generatePortfolioJson() {
             tags: csvData.tags || '',
             link: csvData.link || '',
             youtubeId: csvData.youtubeId || '',
-            year: csvData.year || ''
+            year: csvData.year || '',
+            customRoles: csvData.customRoles || {}
           };
 
           categoryMap.set(baseName, item);

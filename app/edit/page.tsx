@@ -51,6 +51,8 @@ export default function EditPage() {
   const [editingProject, setEditingProject] = useState<ProjectRecord | null>(null);
   const [projectIndex, setProjectIndex] = useState<number | null>(null);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [newRoleKey, setNewRoleKey] = useState('');
+  const [newRoleValue, setNewRoleValue] = useState('');
 
   // Loading & Upload states
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -159,6 +161,7 @@ export default function EditPage() {
               link: it.link || '',
               youtubeId: it.youtubeId || '',
               year: it.year ? String(it.year) : '',
+              customRoles: it.customRoles || {},
             };
           });
           setProjects((prev) => (prev.length === 0 ? mapped : prev));
@@ -386,15 +389,65 @@ export default function EditPage() {
       link: '',
       youtubeId: '',
       year: new Date().getFullYear().toString(),
+      customRoles: {},
     });
+    setNewRoleKey('');
+    setNewRoleValue('');
     setProjectIndex(null);
     setIsProjectModalOpen(true);
   };
 
   const openEditProjectModal = (proj: ProjectRecord, index: number) => {
-    setEditingProject({ ...proj });
+    setEditingProject({
+      ...proj,
+      agency: proj.agency || '',
+      production: proj.production || '',
+      director: proj.director || '',
+      producer: proj.producer || '',
+      tags: proj.tags || '',
+      customRoles: { ...(proj.customRoles || {}) },
+    });
+    setNewRoleKey('');
+    setNewRoleValue('');
     setProjectIndex(index);
     setIsProjectModalOpen(true);
+  };
+
+  const handleAddCustomRole = (keyToAdd?: string, valueToAdd?: string) => {
+    const k = (keyToAdd !== undefined ? keyToAdd : newRoleKey).trim();
+    const v = (valueToAdd !== undefined ? valueToAdd : newRoleValue).trim();
+    if (!k || !editingProject) return;
+
+    setEditingProject({
+      ...editingProject,
+      customRoles: {
+        ...(editingProject.customRoles || {}),
+        [k]: v,
+      },
+    });
+    setNewRoleKey('');
+    setNewRoleValue('');
+  };
+
+  const handleUpdateCustomRole = (roleKey: string, newValue: string) => {
+    if (!editingProject) return;
+    setEditingProject({
+      ...editingProject,
+      customRoles: {
+        ...(editingProject.customRoles || {}),
+        [roleKey]: newValue,
+      },
+    });
+  };
+
+  const handleDeleteCustomRole = (roleKey: string) => {
+    if (!editingProject) return;
+    const updated = { ...(editingProject.customRoles || {}) };
+    delete updated[roleKey];
+    setEditingProject({
+      ...editingProject,
+      customRoles: updated,
+    });
   };
 
   const handleSaveProjectModal = () => {
@@ -404,11 +457,28 @@ export default function EditPage() {
       return;
     }
 
+    // Clean custom roles - strip empty values
+    const cleanCustomRoles: Record<string, string> = {};
+    if (editingProject.customRoles) {
+      Object.entries(editingProject.customRoles).forEach(([k, v]) => {
+        const trimmedK = k.trim();
+        const trimmedV = typeof v === 'string' ? v.trim() : String(v || '').trim();
+        if (trimmedK && trimmedV) {
+          cleanCustomRoles[trimmedK] = trimmedV;
+        }
+      });
+    }
+
+    const projectToSave: ProjectRecord = {
+      ...editingProject,
+      customRoles: cleanCustomRoles,
+    };
+
     const updated = [...projects];
     if (projectIndex !== null && projectIndex >= 0) {
-      updated[projectIndex] = editingProject;
+      updated[projectIndex] = projectToSave;
     } else {
-      updated.unshift(editingProject);
+      updated.unshift(projectToSave);
     }
     setProjects(updated);
     setIsProjectModalOpen(false);
@@ -837,9 +907,15 @@ export default function EditPage() {
                       </p>
 
                       <div className="text-[11px] font-mono text-zinc-400 flex flex-col gap-1 mb-3">
-                        {proj.filename && <div className="truncate"><span className="text-zinc-400">Media:</span> {proj.filename}</div>}
-                        {proj.client && <div className="truncate"><span className="text-zinc-400">Client:</span> {proj.client}</div>}
-                        {proj.year && <div><span className="text-zinc-400">Year:</span> {proj.year}</div>}
+                        {proj.filename && <div className="truncate"><span className="text-zinc-500">Media:</span> {proj.filename}</div>}
+                        {proj.client && <div className="truncate"><span className="text-zinc-500">Client:</span> {proj.client}</div>}
+                        {proj.director && <div className="truncate"><span className="text-zinc-500">Director:</span> {proj.director}</div>}
+                        {proj.year && <div><span className="text-zinc-500">Year:</span> {proj.year}</div>}
+                        {proj.customRoles && Object.keys(proj.customRoles).length > 0 && (
+                          <div className="text-[10px] text-[#00f3ff]/90 truncate">
+                            +{Object.keys(proj.customRoles).length} custom {Object.keys(proj.customRoles).length === 1 ? 'role' : 'roles'} ({Object.keys(proj.customRoles).join(', ')})
+                          </div>
+                        )}
                       </div>
 
                       {proj.techStack && (
@@ -1003,16 +1079,32 @@ export default function EditPage() {
             if (e.target === e.currentTarget) setIsProjectModalOpen(false);
           }}
         >
-          <div className="bg-[#141418] border border-white/15 rounded-2xl max-w-lg w-full max-h-[88vh] overflow-y-auto p-6 md:p-7 shadow-2xl my-auto">
-            <h2 className="text-lg font-bold text-white mb-5">
-              {projectIndex !== null ? 'Edit Project' : 'Add New Project'}
-            </h2>
+          <div className="bg-[#141418] border border-white/15 rounded-2xl max-w-2xl w-full max-h-[88vh] overflow-y-auto p-6 md:p-7 shadow-2xl my-auto">
+            <div className="flex justify-between items-start mb-5 pb-3 border-b border-white/10">
+              <div>
+                <h2 className="text-lg font-bold text-white">
+                  {projectIndex !== null ? 'Edit Project' : 'Add New Project'}
+                </h2>
+                <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                  Update metadata, standard production credits, and custom roles.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsProjectModalOpen(false)}
+                className="text-zinc-400 hover:text-white text-lg p-1"
+              >
+                ✕
+              </button>
+            </div>
 
             <div className="flex flex-col gap-4 text-xs font-mono">
+              {/* Section 1: Basic Info */}
               <div>
                 <label className="text-zinc-400 block mb-1">Project Title *</label>
                 <input
                   type="text"
+                  placeholder="e.g. Agentia Impreuna - S-a terminat cu rasismul"
                   value={editingProject.title}
                   onChange={(e) => setEditingProject({ ...editingProject, title: e.target.value })}
                   required
@@ -1026,7 +1118,7 @@ export default function EditPage() {
                 <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     type="text"
-                    placeholder="e.g. project_showreel"
+                    placeholder="e.g. agentia_impreuna"
                     value={editingProject.filename}
                     onChange={(e) => setEditingProject({ ...editingProject, filename: e.target.value })}
                     required
@@ -1043,7 +1135,7 @@ export default function EditPage() {
                     />
                   </label>
                 </div>
-                <span className="text-[10px] text-zinc-400 mt-1 block">
+                <span className="text-[10px] text-zinc-500 mt-1 block">
                   Uploads image to public/portfolio/media/ and updates filename automatically.
                 </span>
               </div>
@@ -1063,6 +1155,7 @@ export default function EditPage() {
                   <label className="text-zinc-400 block mb-1">Year</label>
                   <input
                     type="text"
+                    placeholder="2024"
                     value={editingProject.year}
                     onChange={(e) => setEditingProject({ ...editingProject, year: e.target.value })}
                     className="w-full bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-white focus:border-[#00f3ff] outline-none"
@@ -1074,6 +1167,7 @@ export default function EditPage() {
                 <label className="text-zinc-400 block mb-1">Description</label>
                 <textarea
                   rows={3}
+                  placeholder="Overview of the project, concept, and creative direction..."
                   value={editingProject.description}
                   onChange={(e) => setEditingProject({ ...editingProject, description: e.target.value })}
                   className="w-full bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-white focus:border-[#00f3ff] outline-none resize-vertical"
@@ -1084,55 +1178,236 @@ export default function EditPage() {
                 <label className="text-zinc-400 block mb-1">Tech Stack (comma-separated)</label>
                 <input
                   type="text"
-                  placeholder="Unreal Engine 5, Houdini, DaVinci"
+                  placeholder="Unreal Engine 5, Houdini, DaVinci Resolve, Cinema 4D"
                   value={editingProject.techStack}
                   onChange={(e) => setEditingProject({ ...editingProject, techStack: e.target.value })}
                   className="w-full bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-white focus:border-[#00f3ff] outline-none"
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-zinc-400 block mb-1">Client</label>
-                  <input
-                    type="text"
-                    value={editingProject.client}
-                    onChange={(e) => setEditingProject({ ...editingProject, client: e.target.value })}
-                    className="w-full bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-white focus:border-[#00f3ff] outline-none"
-                  />
+              {/* Section 2: Standard Production Roles & Credits */}
+              <div className="pt-3 border-t border-white/10">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-300 block mb-2">
+                  Standard Credits & Roles
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
+                  <div>
+                    <label className="text-zinc-400 block mb-1">Client</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Agentia Impreuna"
+                      value={editingProject.client}
+                      onChange={(e) => setEditingProject({ ...editingProject, client: e.target.value })}
+                      className="w-full bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-white focus:border-[#00f3ff] outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-zinc-400 block mb-1">Role</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Lead Director & VFX"
+                      value={editingProject.role}
+                      onChange={(e) => setEditingProject({ ...editingProject, role: e.target.value })}
+                      className="w-full bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-white focus:border-[#00f3ff] outline-none"
+                    />
+                  </div>
                 </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
+                  <div>
+                    <label className="text-zinc-400 block mb-1">Agency</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. McCann / Sector7Hub"
+                      value={editingProject.agency || ''}
+                      onChange={(e) => setEditingProject({ ...editingProject, agency: e.target.value })}
+                      className="w-full bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-white focus:border-[#00f3ff] outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-zinc-400 block mb-1">Production</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Sector7Hub"
+                      value={editingProject.production || ''}
+                      onChange={(e) => setEditingProject({ ...editingProject, production: e.target.value })}
+                      className="w-full bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-white focus:border-[#00f3ff] outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
+                  <div>
+                    <label className="text-zinc-400 block mb-1">Director</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Raul Gheba"
+                      value={editingProject.director || ''}
+                      onChange={(e) => setEditingProject({ ...editingProject, director: e.target.value })}
+                      className="w-full bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-white focus:border-[#00f3ff] outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-zinc-400 block mb-1">Producer</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Roxana Andrei"
+                      value={editingProject.producer || ''}
+                      onChange={(e) => setEditingProject({ ...editingProject, producer: e.target.value })}
+                      className="w-full bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-white focus:border-[#00f3ff] outline-none"
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <label className="text-zinc-400 block mb-1">Role</label>
+                  <label className="text-zinc-400 block mb-1">Tags (comma-separated credits / styles)</label>
                   <input
                     type="text"
-                    placeholder="Lead Director & VFX"
-                    value={editingProject.role}
-                    onChange={(e) => setEditingProject({ ...editingProject, role: e.target.value })}
+                    placeholder="Video Editing, Audio Mixing, Motion Graphics"
+                    value={editingProject.tags || ''}
+                    onChange={(e) => setEditingProject({ ...editingProject, tags: e.target.value })}
                     className="w-full bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-white focus:border-[#00f3ff] outline-none"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-zinc-400 block mb-1">External Link (Optional)</label>
-                  <input
-                    type="text"
-                    placeholder="https://..."
-                    value={editingProject.link}
-                    onChange={(e) => setEditingProject({ ...editingProject, link: e.target.value })}
-                    className="w-full bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-white focus:border-[#00f3ff] outline-none"
-                  />
+              {/* Section 3: Dynamic Custom Roles & Credits */}
+              <div className="pt-3 border-t border-white/10 bg-white/[0.02] p-4 rounded-xl border border-white/10">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1 mb-3">
+                  <div>
+                    <label className="text-[#00f3ff] font-bold uppercase tracking-wider block text-[11px]">
+                      // Custom Roles & Dynamic Credits
+                    </label>
+                    <span className="text-[10px] text-zinc-400 block mt-0.5">
+                      Add as many custom roles as needed. Empty roles are hidden on the live site.
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <label className="text-zinc-400 block mb-1">YouTube Video ID (Optional)</label>
+
+                {/* Existing Custom Roles */}
+                {editingProject.customRoles && Object.keys(editingProject.customRoles).length > 0 ? (
+                  <div className="flex flex-col gap-2 mb-3">
+                    {Object.entries(editingProject.customRoles).map(([roleKey, roleVal]) => (
+                      <div
+                        key={roleKey}
+                        className="flex items-center gap-2 bg-white/5 p-2 rounded-lg border border-white/10"
+                      >
+                        <div className="w-1/3 min-w-[100px] shrink-0">
+                          <span className="text-[#00f3ff] font-bold block truncate text-[11px] uppercase tracking-wider">
+                            {roleKey}
+                          </span>
+                        </div>
+                        <div className="flex-1">
+                          <input
+                            type="text"
+                            placeholder="Person / Studio / Credit"
+                            value={roleVal}
+                            onChange={(e) => handleUpdateCustomRole(roleKey, e.target.value)}
+                            className="w-full bg-black/40 border border-white/10 rounded px-2.5 py-1.5 text-white focus:border-[#00f3ff] outline-none text-xs"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCustomRole(roleKey)}
+                          title="Remove custom role"
+                          className="text-zinc-500 hover:text-rose-400 px-2 py-1 transition text-xs font-bold"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-zinc-500 italic mb-3">
+                    No custom roles added yet for this project.
+                  </p>
+                )}
+
+                {/* Add Custom Role Mini-Form */}
+                <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center pt-2 border-t border-white/5">
                   <input
                     type="text"
-                    placeholder="dQw4w9WgXcQ"
-                    value={editingProject.youtubeId}
-                    onChange={(e) => setEditingProject({ ...editingProject, youtubeId: e.target.value })}
-                    className="w-full bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-white focus:border-[#00f3ff] outline-none"
+                    placeholder="Role Title (e.g. DOP, Colorist, Music)"
+                    value={newRoleKey}
+                    onChange={(e) => setNewRoleKey(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddCustomRole();
+                      }
+                    }}
+                    className="w-full sm:w-2/5 bg-black/40 border border-white/15 rounded-lg px-3 py-2 text-white focus:border-[#00f3ff] outline-none text-xs"
                   />
+                  <input
+                    type="text"
+                    placeholder="Person / Company Name"
+                    value={newRoleValue}
+                    onChange={(e) => setNewRoleValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddCustomRole();
+                      }
+                    }}
+                    className="w-full sm:flex-1 bg-black/40 border border-white/15 rounded-lg px-3 py-2 text-white focus:border-[#00f3ff] outline-none text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleAddCustomRole()}
+                    disabled={!newRoleKey.trim()}
+                    className="px-4 py-2 rounded-lg bg-[#00f3ff]/20 border border-[#00f3ff]/40 text-[#00f3ff] font-bold hover:bg-[#00f3ff]/30 transition disabled:opacity-40 text-xs shrink-0"
+                  >
+                    + Add Role
+                  </button>
+                </div>
+
+                {/* Quick Suggestion Pills */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-2.5">
+                  <span className="text-[10px] text-zinc-500 uppercase">Quick Add:</span>
+                  {['DOP', 'Colorist', 'Sound Design', 'Music', 'VFX', '3D Artist', 'Motion Design', 'Editor', 'Costume', 'Gaffer'].map((sug) => {
+                    const alreadyHas = editingProject.customRoles && editingProject.customRoles[sug] !== undefined;
+                    if (alreadyHas) return null;
+                    return (
+                      <button
+                        key={sug}
+                        type="button"
+                        onClick={() => handleAddCustomRole(sug, '')}
+                        className="text-[10px] font-mono px-2 py-0.5 rounded bg-white/5 border border-white/10 hover:border-[#00f3ff]/50 hover:text-[#00f3ff] text-zinc-400 transition"
+                      >
+                        + {sug}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Section 4: External Media & Links */}
+              <div className="pt-3 border-t border-white/10">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-300 block mb-2">
+                  External Media & Links
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-zinc-400 block mb-1">External Link (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="https://..."
+                      value={editingProject.link}
+                      onChange={(e) => setEditingProject({ ...editingProject, link: e.target.value })}
+                      className="w-full bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-white focus:border-[#00f3ff] outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-zinc-400 block mb-1">YouTube Video ID (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="dQw4w9WgXcQ"
+                      value={editingProject.youtubeId}
+                      onChange={(e) => setEditingProject({ ...editingProject, youtubeId: e.target.value })}
+                      className="w-full bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-white focus:border-[#00f3ff] outline-none"
+                    />
+                  </div>
                 </div>
               </div>
 

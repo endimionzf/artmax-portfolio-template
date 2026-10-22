@@ -3,6 +3,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 import siteConfig from '@/site.config.json';
+import { withBasePath } from '@/utils/basepath';
 
 export interface HUDProps {
   audioEnabled: boolean;
@@ -41,6 +42,7 @@ export function HUD({
   // Keep a cached copy of the info so the text doesn't instantly vanish while fading out
   const [displayInfo, setDisplayInfo] = useState<any | null>(null);
   const [isUserActive, setIsUserActive] = useState(true);
+  const [logoError, setLogoError] = useState(false);
 
   const configuredCategories = categories || (siteConfig.categories as Array<{ id: string, label: string, color: string, curvePreset?: string }> | undefined) || [
     { id: 'video', label: 'Video', color: '#ff003c' },
@@ -124,18 +126,19 @@ export function HUD({
               className={`mix-blend-difference transition-all duration-1000 ${isStarted ? 'opacity-90 hover:opacity-50 hover:scale-105 active:scale-95' : 'opacity-20'}`}
               title={branding.contactButtonTitle || 'Contact'}
             >
-              {branding.logoType === 'text' || !branding.logoImage ? (
+              {branding.logoType === 'text' || !branding.logoImage || logoError ? (
                 <span className="text-xl md:text-2xl font-black text-white tracking-widest uppercase">
                   {branding.logoText || siteConfig.site?.title || 'Studio'}
                 </span>
               ) : (
                 <Image
-                  src={branding.logoImage || '/artmax_logo.png'}
+                  src={withBasePath(branding.logoImage || '/artmax_logo.png')}
                   alt={branding.logoAlt || 'Studio Logo'}
                   width={120}
                   height={40}
                   className="object-contain w-[80px] md:w-[120px] h-auto"
                   priority
+                  onError={() => setLogoError(true)}
                 />
               )}
             </button>

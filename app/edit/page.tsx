@@ -19,6 +19,7 @@ import {
   projectsFromCSV,
   projectsToCSV,
 } from '@/utils/csv';
+import { withBasePath } from '@/utils/basepath';
 
 export default function EditPage() {
   // Navigation tab
@@ -707,7 +708,7 @@ export default function EditPage() {
                     <span className="text-[10px] font-mono text-zinc-400">Current Logo:</span>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={siteConfig.branding.logoImage}
+                      src={withBasePath(siteConfig.branding.logoImage)}
                       alt="Logo preview"
                       className="h-7 max-w-[140px] object-contain"
                       onError={(e) => {

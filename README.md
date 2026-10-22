@@ -40,7 +40,7 @@ npm install
 
 ### 2. Configuration (`site.config.json`)
 
-Customize deployment paths, site meta, and categories in `site.config.json`:
+Customize deployment paths, branding (logo image or text), navigation, intro quote/buttons, contact info, and UI messages in `site.config.json` (or via `npm run edit`):
 
 ```json
 {
@@ -50,7 +50,39 @@ Customize deployment paths, site meta, and categories in `site.config.json`:
   },
   "site": {
     "title": "Your Name / Studio",
-    "description": "Tech & Creative Spatial Portfolio"
+    "description": "Tech & Creative Spatial Portfolio",
+    "author": "Your Name",
+    "siteUrl": "https://yourdomain.com"
+  },
+  "branding": {
+    "logoType": "image",
+    "logoImage": "/artmax_logo.png",
+    "logoText": "Studio Name",
+    "logoAlt": "Studio Logo",
+    "contactButtonTitle": "Contact Studio"
+  },
+  "navigation": {
+    "showJournalLink": true,
+    "journalLinkText": "// Journey_Log",
+    "journalLinkUrl": "/blog"
+  },
+  "startOverlay": {
+    "title": "Your Studio",
+    "quote": "In the vastness of light and the immensity of time...",
+    "exploreButton": { "title": "Explore", "subtitle": "3D exploration" },
+    "indexButton": { "title": "Index", "subtitle": "Classical internet experience" },
+    "soundHint": "Sound Required"
+  },
+  "contact": {
+    "title": "Let's collaborate on your next vision.",
+    "email": "contact@yourdomain.com",
+    "phone": "+1234567890",
+    "buttonText": "Return to Experience"
+  },
+  "messages": {
+    "infoButton": "INFO",
+    "backButton": "BACK",
+    "techStackHeader": "// Tech_Stack"
   },
   "categories": [
     {

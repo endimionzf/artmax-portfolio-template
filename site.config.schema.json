@@ -20,6 +20,7 @@
     },
     "site": {
       "type": "object",
+      "description": "Site-wide metadata and SEO settings",
       "properties": {
         "title": {
           "type": "string",
@@ -28,7 +29,149 @@
         "description": {
           "type": "string",
           "description": "Meta description for search engines and social cards"
+        },
+        "author": {
+          "type": "string",
+          "description": "Author or studio name"
+        },
+        "siteUrl": {
+          "type": "string",
+          "description": "Full production URL (e.g. https://artmaxstudio.ro)"
         }
+      }
+    },
+    "branding": {
+      "type": "object",
+      "description": "Top-left branding and logo customization",
+      "properties": {
+        "logoType": {
+          "type": "string",
+          "enum": ["image", "text"],
+          "description": "Whether to display an image asset or styled typography logo",
+          "default": "image"
+        },
+        "logoImage": {
+          "type": "string",
+          "description": "Path to logo image relative to public/ (e.g. /artmax_logo.png)",
+          "default": "/artmax_logo.png"
+        },
+        "logoText": {
+          "type": "string",
+          "description": "Text logo displayed when logoType is 'text' or as image fallback",
+          "default": "Artmax Studio"
+        },
+        "logoAlt": {
+          "type": "string",
+          "description": "Alt attribute for the logo image",
+          "default": "Studio Logo"
+        },
+        "contactButtonTitle": {
+          "type": "string",
+          "description": "Tooltip title on the logo button that opens contact overlay",
+          "default": "Contact Studio"
+        }
+      }
+    },
+    "navigation": {
+      "type": "object",
+      "description": "Navigation links and header shortcuts",
+      "properties": {
+        "showJournalLink": {
+          "type": "boolean",
+          "description": "Whether to display the blog/journal link in the HUD",
+          "default": true
+        },
+        "journalLinkText": {
+          "type": "string",
+          "description": "Display text for the blog/journal link",
+          "default": "// Journey_Log"
+        },
+        "journalLinkUrl": {
+          "type": "string",
+          "description": "Target path or URL for the journal link",
+          "default": "/blog"
+        }
+      }
+    },
+    "startOverlay": {
+      "type": "object",
+      "description": "Intro splash screen text, quote, button labels, and controls guide",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Main title displayed on the intro screen (e.g. Artmax Studio)"
+        },
+        "quote": {
+          "type": "string",
+          "description": "Philosophical or descriptive intro quote"
+        },
+        "exploreButton": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string", "default": "Explore" },
+            "subtitle": { "type": "string", "default": "3D exploration\n(but with secret discoveries)" },
+            "hint": { "type": "string", "default": "Keyboard and Mouse Required" }
+          }
+        },
+        "indexButton": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string", "default": "Index" },
+            "subtitle": { "type": "string", "default": "Classical internet experience\nof scrolling" }
+          }
+        },
+        "soundHint": {
+          "type": "string",
+          "description": "Sound recommendation text at bottom of intro screen",
+          "default": "Sound Required"
+        },
+        "controls": {
+          "type": "array",
+          "description": "Keybinding badges displayed at the bottom of the intro screen",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": { "type": "string" },
+              "label": { "type": "string" }
+            },
+            "required": ["key", "label"]
+          }
+        }
+      }
+    },
+    "contact": {
+      "type": "object",
+      "description": "Contact overlay modal messages and communication channels",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Heading text in the contact overlay",
+          "default": "Let's collaborate on your next immersive vision."
+        },
+        "email": {
+          "type": "string",
+          "description": "Contact email address"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Contact telephone or mobile number"
+        },
+        "buttonText": {
+          "type": "string",
+          "description": "Label on the return/close button",
+          "default": "Return to Experience"
+        }
+      }
+    },
+    "messages": {
+      "type": "object",
+      "description": "UI action labels, error text, and section badges",
+      "properties": {
+        "infoButton": { "type": "string", "default": "INFO" },
+        "backButton": { "type": "string", "default": "BACK" },
+        "techStackHeader": { "type": "string", "default": "// Tech_Stack" },
+        "notFoundTitle": { "type": "string", "default": "404 // Coordinate Not Found" },
+        "notFoundMessage": { "type": "string", "default": "Spatial_Navigator" }
       }
     },
     "categories": {

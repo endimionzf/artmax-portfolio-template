@@ -30,22 +30,35 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            immersive-web/package-lock.json
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
       - name: Install Dependencies
-        run: npm ci
+        run: |
+          if [ -f "immersive-web/package.json" ]; then
+            cd immersive-web && npm ci
+          else
+            npm ci
+          fi
 
       - name: Build Static Export with BasePath
+        env:
+          BASE_PATH: "/${{ github.event.repository.name }}"
         run: |
-          REPO_NAME="${{ github.event.repository.name }}"
-          npm run build -- --base-path "/${REPO_NAME}"
+          if [ -f "immersive-web/package.json" ]; then
+            cd immersive-web && npm run build
+          else
+            npm run build
+          fi
 
       - name: Upload GitHub Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./out
+          path: ${{ hashFiles('immersive-web/out/index.html') != '' && './immersive-web/out' || './out' }}
 
   deploy:
     environment:

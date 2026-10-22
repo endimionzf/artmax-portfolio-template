@@ -1,7 +1,11 @@
 import Link from 'next/link';
+import siteConfig from '@/site.config.json';
+
+const siteTitle = siteConfig.site?.title || 'Studio';
+const messages = (siteConfig as any).messages || {};
 
 export const metadata = {
-  title: '404 // Coordinate Not Found | Artmax Studio',
+  title: messages.notFoundTitle || `404 // Coordinate Not Found | ${siteTitle}`,
   description: 'The requested spatial coordinates do not exist in this portfolio galaxy.',
 };
 
@@ -37,7 +41,7 @@ export default function NotFound() {
       </div>
 
       <div className="absolute bottom-6 font-mono text-[10px] text-white/20 tracking-widest uppercase">
-        Artmax Studio // Spatial_Navigator
+        {messages.notFoundMessage || `${siteTitle} // Spatial_Navigator`}
       </div>
     </div>
   );

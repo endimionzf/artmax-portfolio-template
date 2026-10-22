@@ -1,0 +1,23 @@
+# Safari Video Playback Fix
+# Apache/CPanel requires these headers for iOS to handshake with MP4/HEVC files.
+
+<IfModule mod_headers.c>
+    # Safari requires Byte-Range requests (Accept-Ranges: bytes)
+    Header set Accept-Ranges bytes
+    # Ensure CORS doesn't block the video if requested via JS
+    Header set Access-Control-Allow-Origin "*"
+    Header set Access-Control-Allow-Methods "GET, OPTIONS"
+</IfModule>
+
+# Ensure MP4 and HEVC MIME types are explicitly set
+<IfModule mod_mime.c>
+    AddType video/mp4 .mp4
+    AddType video/mp4 .m4v
+    # HEVC specific (sometimes helps Safari)
+    AddType video/mp4 .hevc
+</IfModule>
+
+# Disable compression for videos (Safari can fail to decode gzipped MP4s)
+<IfModule mod_deflate.c>
+    SetEnvIfNoCase Request_URI \.(?:mp4|m4v|mov)$ no-gzip dont-vary
+</IfModule>

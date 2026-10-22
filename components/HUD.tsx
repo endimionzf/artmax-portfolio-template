@@ -109,6 +109,10 @@ export function HUD({
     }
   }, [activeProjectInfo]);
 
+  const branding = (siteConfig as any).branding || {};
+  const navigation = (siteConfig as any).navigation || {};
+  const messages = (siteConfig as any).messages || {};
+
   return (
     <>
       <div className={`fixed inset-0 z-[100] pointer-events-none flex flex-col justify-between p-8 transition-opacity duration-700 ${isUserActive ? 'opacity-100' : 'opacity-0'}`}>
@@ -118,24 +122,30 @@ export function HUD({
             <button
               onClick={onOpenContact}
               className={`mix-blend-difference transition-all duration-1000 ${isStarted ? 'opacity-90 hover:opacity-50 hover:scale-105 active:scale-95' : 'opacity-20'}`}
-              title="Contact Artmax Studio"
+              title={branding.contactButtonTitle || 'Contact'}
             >
-              <Image
-                src="/artmax_logo.png"
-                alt="Artmax Logo"
-                width={120}
-                height={40}
-                className="object-contain w-[80px] md:w-[120px] h-auto"
-                priority
-              />
+              {branding.logoType === 'text' || !branding.logoImage ? (
+                <span className="text-xl md:text-2xl font-black text-white tracking-widest uppercase">
+                  {branding.logoText || siteConfig.site?.title || 'Studio'}
+                </span>
+              ) : (
+                <Image
+                  src={branding.logoImage || '/artmax_logo.png'}
+                  alt={branding.logoAlt || 'Studio Logo'}
+                  width={120}
+                  height={40}
+                  className="object-contain w-[80px] md:w-[120px] h-auto"
+                  priority
+                />
+              )}
             </button>
 
-            {isStarted && (
+            {isStarted && navigation.showJournalLink !== false && (
               <Link 
-                href="/blog" 
+                href={navigation.journalLinkUrl || '/blog'} 
                 className="text-[10px] font-mono tracking-[0.3em] uppercase text-white/40 hover:text-white transition-opacity duration-1000 mix-blend-difference"
               >
-                // Journey_Log
+                {navigation.journalLinkText || '// Journey_Log'}
               </Link>
             )}
           </div>
@@ -201,7 +211,7 @@ export function HUD({
                     onClick={onBack}
                     className="px-6 h-12 flex items-center justify-center rounded-full border bg-white/10 text-white border-white/30 hover:bg-white/20 transition-all font-bold tracking-[0.2em] text-xs uppercase"
                   >
-                    BACK
+                    {messages.backButton || 'BACK'}
                   </button>
 
                   <button
@@ -223,7 +233,7 @@ export function HUD({
                     onClick={onToggleInfo}
                     className={`px-6 h-12 flex items-center justify-center rounded-full border transition-all font-bold tracking-[0.2em] text-xs uppercase ${isInfoOpen ? 'bg-white text-black border-white' : 'bg-white/10 text-white border-white/30 hover:bg-white/20'}`}
                   >
-                    INFO
+                    {messages.infoButton || 'INFO'}
                   </button>
                 </div>
               )}
@@ -286,7 +296,9 @@ export function HUD({
           {/* Tech Stack Pills (Monospace neon aesthetic) */}
           {(displayInfo?.techStack || displayInfo?.tech_stack) && (
             <div className="mb-8">
-              <h3 className="text-xs uppercase tracking-[0.2em] text-cyan-400/80 mb-3 font-mono">// Tech_Stack</h3>
+              <h3 className="text-xs uppercase tracking-[0.2em] text-cyan-400/80 mb-3 font-mono">
+                {messages.techStackHeader || '// Tech_Stack'}
+              </h3>
               <div className="flex flex-wrap gap-2">
                 {(Array.isArray(displayInfo.techStack)
                   ? displayInfo.techStack

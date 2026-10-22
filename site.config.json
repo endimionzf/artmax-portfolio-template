@@ -1,12 +1,57 @@
 {
   "$schema": "./site.config.schema.json",
   "deployment": {
-    "basePath": "/template",
+    "basePath": "",
     "_comment": "Where the site is deployed. Leave empty '' for domain root (e.g. artmaxstudio.ro/), or set to '/template' for subfolder, or '/repo-name' for GitHub Pages."
   },
   "site": {
     "title": "Artmax Studio",
-    "description": "Immersive 3D Spatial Portfolio & Journal"
+    "description": "Immersive 3D Spatial Portfolio & Journal",
+    "author": "Artmax Studio",
+    "siteUrl": "https://artmaxstudio.ro"
+  },
+  "branding": {
+    "logoType": "image",
+    "logoImage": "/artmax_logo.png",
+    "logoText": "Artmax Studio",
+    "logoAlt": "Artmax Logo",
+    "contactButtonTitle": "Contact Artmax Studio"
+  },
+  "navigation": {
+    "showJournalLink": true,
+    "journalLinkText": "// Journey_Log",
+    "journalLinkUrl": "/blog"
+  },
+  "startOverlay": {
+    "title": "Artmax Studio",
+    "quote": "\"In the vastness of light and the immensity of time, every creation is a story captured in motion. How shall we witness these artifacts of imagination?\"",
+    "exploreButton": {
+      "title": "Explore",
+      "subtitle": "3D exploration\n(but with secret discoveries)",
+      "hint": "Keyboard and Mouse Required"
+    },
+    "indexButton": {
+      "title": "Index",
+      "subtitle": "Classical internet experience\nof scrolling"
+    },
+    "soundHint": "Sound Required",
+    "controls": [
+      { "key": "WASD", "label": "explore" },
+      { "key": "Mouse", "label": "interact" }
+    ]
+  },
+  "contact": {
+    "title": "Let's collaborate on your next immersive vision.",
+    "email": "maxim@artmaxstudio.ro",
+    "phone": "0742098443",
+    "buttonText": "Return to Experience"
+  },
+  "messages": {
+    "infoButton": "INFO",
+    "backButton": "BACK",
+    "techStackHeader": "// Tech_Stack",
+    "notFoundTitle": "404 // Coordinate Not Found | Artmax Studio",
+    "notFoundMessage": "Artmax Studio // Spatial_Navigator"
   },
   "categories": [
     {
